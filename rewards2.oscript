@@ -1,0 +1,90 @@
+{
+	getters: `{
+
+		$locked_reward_share = 0.02;
+		$liquid_reward_share = 0.002;
+		$new_user_reward = 10e9;
+		$referral_reward = 10e9;
+		$balance_cap = 200e9;
+
+
+		$get_period = ($days_old, $fu_addition_days) => {
+			$res = {period: 1};
+			foreach($fu_addition_days, 7, ($index, $day) => {
+				if ($days_old > +$day)
+					$res.period = $index + 2;
+			});
+			$res.period
+		};
+
+		$is_eligible_for_infriends = ($address, $user, $ceiling_price, $followup_reward_days) => {
+			$days_old = floor((timestamp - $user.reg_ts)/24/3600);
+			$fu_addition_days = keys($followup_reward_days);
+			$period = $get_period($days_old, $fu_addition_days);
+			$days_old % $period == 0
+		};
+
+		// either one of the users is new or both are allowed to make in-friends today
+		$are_eligible = ($address1, $address2, $user1, $user2, $ceiling_price, $followup_reward_days) => {
+			$bNewUser = !$user1.last_date OR !$user2.last_date;
+			{
+				user1_eligible: $bNewUser OR $is_eligible_for_infriends($address1, $user1, $ceiling_price, $followup_reward_days),
+				user2_eligible: $bNewUser OR $is_eligible_for_infriends($address2, $user2, $ceiling_price, $followup_reward_days),
+			}
+		};
+
+		$get_rewards = ($address1, $address2, $user1, $user2, $ceiling_price, $bFollowup) => {
+			$total_balance1 = $user1.balance + $user1.bytes_balance/$ceiling_price;
+			$total_balance2 = $user2.balance + $user2.bytes_balance/$ceiling_price;
+			$bNewUser = !$user1.last_date OR !$user2.last_date;
+			$capped_total_balance1 = $bNewUser ? $total_balance1 : min($total_balance1, $balance_cap);
+			$capped_total_balance2 = $bNewUser ? $total_balance2 : min($total_balance2, $balance_cap);
+			$rewards = {
+				user1: {
+					locked: floor($capped_total_balance1 * $locked_reward_share),
+					liquid: floor($capped_total_balance1 * $liquid_reward_share),
+					is_new: !$user1.last_date,
+				},
+				user2: {
+					locked: floor($capped_total_balance2 * $locked_reward_share),
+					liquid: floor($capped_total_balance2 * $liquid_reward_share),
+					is_new: !$user2.last_date,
+				},
+			};
+
+			if ($bNewUser){
+				$capped_new_user_reward = floor(min($new_user_reward, $total_balance1, $total_balance2));
+				$rewards.user1.locked = $rewards.user1.locked + $capped_new_user_reward;
+				$rewards.user1.new_user_reward = $capped_new_user_reward;
+				$rewards.user2.locked = $rewards.user2.locked + $capped_new_user_reward;
+				$rewards.user2.new_user_reward = $capped_new_user_reward;
+			}
+
+			if (!$user1.last_date AND $user1.ref){
+				$capped_referral_reward1 = min($referral_reward, floor($total_balance1));
+				$rewards.user1.referred_user_reward = $capped_referral_reward1;
+				$rewards.user1.locked = $rewards.user1.locked + $capped_referral_reward1;
+				$rewards.user1.referrer = {address: $user1.ref, reward: $capped_referral_reward1};
+				$rewards.referrers[$user1.ref] = $capped_referral_reward1;
+			}
+			if (!$user2.last_date AND $user2.ref){
+				$capped_referral_reward2 = min($referral_reward, floor($total_balance2));
+				$rewards.user2.referred_user_reward = $capped_referral_reward2;
+				$rewards.user2.locked = $rewards.user2.locked + $capped_referral_reward2;
+				$rewards.user2.referrer = {address: $user2.ref, reward: $capped_referral_reward2};
+				$rewards.referrers[$user2.ref] = $capped_referral_reward2 + $rewards.referrers[$user2.ref]; // might be the same referrer for both users
+			}
+
+			$rewards
+		};
+
+
+	}`,
+	messages: [{
+		app: 'state',
+		state: `{
+			$get_rewards();
+			bounce("library only");
+		}`
+	}]
+}

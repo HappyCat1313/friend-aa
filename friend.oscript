@@ -1,0 +1,465 @@
+
+{
+	doc_url: "https://friends.obyte.org/friends.json",
+	getters: `{
+
+		/* nonce: 177214 */
+
+		$matching_timeout = 600;
+
+		$year = 31536000; // 365 * 24 * 3600;
+
+		$get_variables = () => {
+			var['variables'] OTHERWISE {
+				rewards_aa: 'EJZUDLY4XHCNC7JIX5SOYPU4QJGIPMXG',
+				messaging_attestors: '',
+				real_name_attestors: '',
+				referrer_deposit_reward_share: 0.01,
+				followup_reward_share: 0.1,
+				min_balance_instead_of_real_name: 500e9,
+			}
+		};
+
+		$get_followup_reward_days = () => {
+			'60': true,  // +2 months
+			'150': true, // +3 months
+			'270': true, // +4 months
+			'450': true, // +6 months
+			'720': true, // +9 months
+			'1080': true, // +12 months
+			'1620': true, // +18 months
+		};
+
+		$get_ceiling_price = () => {
+			$constants = var['constants'];
+			2^((timestamp - $constants.launch_ts)/$year)
+		};
+
+		$is_eligible_for_infriends = ($address) => {
+			$get_variables().rewards_aa#5.$is_eligible_for_infriends($address, var['user_'||$address], $get_ceiling_price(), $get_followup_reward_days())
+		};
+
+		$get_rewards_description = ($rewards, $address) => {
+			$res = {
+				desc: "liquid " || $rewards.user1.liquid/1e9 || " FRD, locked " || $rewards.user1.locked/1e9 || " FRD"
+			};
+			if ($rewards.user1.new_user_reward)
+				$res.desc = $res.desc || ", including new user reward " || $rewards.user1.new_user_reward/1e9 || " FRD";
+			if ($rewards.user1.referred_user_reward) // someone referred me and this is my first friendship
+				$res.desc = $res.desc || ", including referred user reward " || $rewards.user1.referred_user_reward/1e9 || " FRD";
+			if ($rewards.referrers[$address]) // referrer reward is not included in .locked, that's why "plus"
+				$res.desc = $res.desc || ", plus referrer reward " || $rewards.referrers[$address]/1e9 || " FRD";
+			$res.desc
+		};
+
+
+	}`,
+	init: `{
+		
+		$followup_claim_term = 10; // days
+
+		$constants = var['constants'] OTHERWISE {};
+
+		// FRD token
+		$asset = $constants.asset;
+
+		$governance_aa = $constants.governance_aa;
+
+		$variables = $get_variables();
+
+		$ceiling_price = 2^((timestamp - $constants.launch_ts)/$year);
+
+
+		if ($asset)
+			$received_amount = trigger.output[[asset=$asset]];
+		$received_bytes_amount = max(trigger.output[[asset=base]] - 10000, 0);
+
+
+		$governance_base_aa = '2GLKGKLGH4I6EGBMSQ3BNDO3LJAYEBQI';
+
+	}`,
+	messages: {
+		cases: [
+
+			// 0. define the token asset and governance AA
+			{
+				if: `{ trigger.data.define AND !$asset }`,
+				messages: [
+					{
+						app: 'asset',
+						payload: {
+							// without cap
+							is_private: false,
+							is_transferrable: true,
+							auto_destroy: false,
+							fixed_denominations: false,
+							issued_by_definer_only: true,
+							cosigned_by_definer: false,
+							spender_attested: false,
+						}
+					},
+					{ // define governance AA
+						app: 'definition',
+						payload: {
+							definition: [
+								'autonomous agent',
+								{
+									base_aa: `{$governance_base_aa}`,
+									params: {
+										friend_aa: `{this_address}`,
+									}
+								}
+							]
+						}
+					},
+					{
+						app: 'state',
+						state: `{
+							$constants.asset = response_unit;
+							$constants.governance_aa = unit[response_unit].messages[[.app='definition']].payload.address;
+							$constants.launch_ts = timestamp;
+							var['constants'] = $constants;
+							response['asset'] = response_unit;
+						}`
+					}
+				]
+			},
+
+
+			// accept variable changes from the governance AA
+			{ 
+				if: `{ trigger.address == $governance_aa AND trigger.data.name }`, // trigger.data.value can be falsy
+				init: `{
+					$name = trigger.data.name;
+					$value = trigger.data.value;
+				}`,
+				messages: [
+					{
+						app: 'state',
+						state: `{
+							$variables[$name] = $value;
+							var['variables'] = $variables;
+						}`
+					}
+				]
+			},
+
+
+			// deposit
+			{
+				if: `{
+					($received_amount > 0 OR $received_bytes_amount > 0 OR trigger.data.term) AND trigger.data.deposit
+				}`,
+				init: `{
+					$username = attestation[[attestors=$variables.messaging_attestors, address=trigger.address, ifnone=false]].username;
+					require($username, "your address must be attested on a messaging service");
+					require(!is_aa(trigger.address), "AAs not allowed to participate");
+
+					$user = var['user_'||trigger.address] OTHERWISE {balance: 0, bytes_balance: 0, unlock_date: false, reg_ts: timestamp};
+					$bNewUser = !$user.unlock_date;
+
+					$total_balance = $user.balance + $received_amount + ($user.bytes_balance + $received_bytes_amount)/$ceiling_price;
+					$bBigDeposit = $total_balance >= $variables.min_balance_instead_of_real_name;
+					if (!$bBigDeposit)
+						$user_id = attestation[[attestors=$variables.real_name_attestors, address=trigger.address, ifnone=false]].user_id;
+					require($user_id OR $bBigDeposit, "your address must be real-name attested or you should deposit at least "||($variables.min_balance_instead_of_real_name/1e9)||" FRD");
+					if ($user_id){
+						$addr = var['address_'||$user_id];
+						require(!$addr OR $addr == trigger.address, "only one account per user is allowed");
+					}
+
+					if (exists(trigger.data.ref)){
+						require(is_valid_address(trigger.data.ref), "referrer address not valid");
+						require(var['user_'||trigger.data.ref], "referrer doesn't exist");
+						if ($bNewUser){
+							$user.ref = trigger.data.ref;
+							if (trigger.data.no_referrer_deposit_reward)
+								$user.no_referrer_deposit_reward = true;
+						}
+						else
+							response['ref_ignored'] = "Referrer can be set only with the first deposit";
+					}
+
+					if ($user.ref){
+						$referrer = var['user_'||$user.ref];
+						$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
+						$bReferrerEligible = $referrer.unlock_date >= $min_unlock_date;
+						if (!$bReferrerEligible)
+							response['warning'] = "Referrer's unlock date is less than 1 year in the future and they are not eligible to receive the deposit reward";
+					}
+
+					$term = trigger.data.term OTHERWISE 365;
+					require($term >= 365, "minimum term is 365 days");
+					$new_unlock_date = timestamp_to_string(timestamp + $term * 24 * 3600, 'date');
+					if (!$bNewUser)
+						require($new_unlock_date >= $user.unlock_date, "new unlock date must not go back");
+
+				}`,
+				messages: [
+					{
+						if: `{$user.ref AND !$user.no_referrer_deposit_reward AND $bReferrerEligible}`,
+						app: 'payment',
+						payload: {
+							asset: `{$asset}`,
+							outputs: [{address: "{$user.ref}", amount: "{floor(($received_amount + $received_bytes_amount/$ceiling_price) * $variables.referrer_deposit_reward_share)}"}]
+						}
+					},
+					{
+						app: 'state',
+						state: `{
+							$user.balance = $user.balance + $received_amount;
+							$user.bytes_balance = $user.bytes_balance + $received_bytes_amount;
+							$user.unlock_date = $new_unlock_date;
+							var['user_'||trigger.address] = $user;
+							if ($bNewUser AND $user_id)
+								var['address_'||$user_id] = trigger.address;
+							var['total_locked'] += $received_amount;
+							var['total_locked_bytes'] += $received_bytes_amount;
+
+							if ($received_amount > 0 OR $received_bytes_amount > 0)
+								response['message'] = "Deposited";
+							response['unlock_date'] = $new_unlock_date;
+							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount});
+						}`
+					}
+				]
+			},
+
+
+			// become friends with someone and get rewards, or claim follow-up rewards
+			{
+				if: `{
+					$friend = trigger.data.friend;
+					$days = trigger.data.days;
+					(trigger.data.connect OR trigger.data.followup AND $days) AND $friend
+				}`,
+				init: `{
+					$today = timestamp_to_string(timestamp, 'date');
+					$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
+
+					$user1 = var['user_'||trigger.address];
+					require($user1, "please make a deposit first");
+					require($user1.unlock_date >= $min_unlock_date, "your unlock date must be "||$min_unlock_date||" or later");
+
+					require($friend != trigger.address, "you cannot become friends with yourself");
+					$user2 = var['user_'||$friend];
+					require($user2, "your friend must make a deposit first");
+					require($user2.unlock_date >= $min_unlock_date, "your friend's unlock date must be "||$min_unlock_date||" or later");
+
+					if (trigger.data.connect){
+						require(!$days, "don't send days for the initial connect");
+						require(!var['friend_'||trigger.address||'_'||$today], "you already made a friend today, try tomorrow");
+						require(!var['friend_'||$friend||'_'||$today], "your friend already made a friend today, try tomorrow");
+						$eligibility = $variables.rewards_aa#5.$are_eligible(trigger.address, $friend, $user1, $user2, $ceiling_price, $get_followup_reward_days());
+						require($eligibility.user1_eligible, "you are not eligible to make in-friends today");
+						require($eligibility.user2_eligible, "your friend is not eligible to make in-friends today");
+					}
+					else{
+						require($get_followup_reward_days()[$days], "no such follow-up");
+					}
+
+					$pair = trigger.address < $friend ? trigger.address||'_'||$friend : $friend||'_'||trigger.address;
+					$key = 'friendship_'||$pair;
+					$friendship = var[$key] OTHERWISE {followup_reward_share: $variables.followup_reward_share}; // the share is fixed for all future followups
+					if (!trigger.data.connect){ // followup
+						require($friendship.initial.accept_ts, "you are not friends");
+						$elapsed_days = (timestamp - $friendship.initial.accept_ts)/24/3600;
+						require($elapsed_days >= +$days, "too early");
+						require($elapsed_days <= $days + $followup_claim_term, "too late");
+					}
+
+					$rewards = $variables.rewards_aa#10.$get_rewards(trigger.address, $friend, $user1, $user2, $ceiling_price, !trigger.data.connect);
+					if (!trigger.data.connect){ // followup, multiply all rewards by followup_reward_share
+						$rewards.user1.locked = floor($rewards.user1.locked * $friendship.followup_reward_share);
+						$rewards.user1.liquid = floor($rewards.user1.liquid * $friendship.followup_reward_share);
+						$rewards.user2.locked = floor($rewards.user2.locked * $friendship.followup_reward_share);
+						$rewards.user2.liquid = floor($rewards.user2.liquid * $friendship.followup_reward_share);
+					}
+					$rewards_description = $get_rewards_description($rewards, trigger.address);
+
+					$index = trigger.data.connect ? 'initial' : 'followup_'||$days;
+					if (!$friendship[$index]){
+						$friendship[$index] = {first: trigger.address, ts: timestamp};
+						response['message'] = "Registered your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: "||$rewards_description||".";
+					}
+					else{
+						require(!$friendship[$index].accept_ts, trigger.data.connect ? "you are already friends" : "already paid");
+						if ($friendship[$index].first == trigger.address){
+							$friendship[$index].ts = timestamp;
+							response['message'] = "Refreshed your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: "||$rewards_description||".";
+						}
+						else{
+							$bInTime = timestamp < $friendship[$index].ts + $matching_timeout;
+							if (!$bInTime){
+								$friendship[$index].ts = timestamp;
+								$friendship[$index].first = trigger.address;
+								response['message'] = "Unfortunately, you are too late. Your friend has to send their request again within 10 minutes, otherwise you both will have to start over. Expected rewards: "||$rewards_description||".";
+							}
+							else{ // pay rewards
+								$friendship[$index].accept_ts = timestamp;
+								$user1.balance = $user1.balance + $rewards.user1.locked;
+								$user2.balance = $user2.balance + $rewards.user2.locked;
+								if (trigger.data.connect){
+									$user1.last_date = $today;
+									$user2.last_date = $today;
+									if ($rewards.user1.is_new) // record a new user reward for the opposite user
+										$user2.new_user_rewards = $user2.new_user_rewards + $rewards.user2.new_user_reward;
+									if ($rewards.user2.is_new) // record a new user reward for the opposite user
+										$user1.new_user_rewards = $user1.new_user_rewards + $rewards.user1.new_user_reward;
+								}
+
+								response['message'] = (trigger.data.connect ? "Now you've become friends and you've received the following rewards: " : "You've received followup rewards: ") || $rewards_description || ".";
+								response['events'] = json_stringify({type: 'rewards', user1: trigger.address, user2: $friend, rewards: $rewards, followup: !trigger.data.connect, days: $days});
+							}
+						}
+					}
+
+				}`,
+				messages: [
+					{
+						if: `{$friendship[$index].accept_ts}`,
+						app: 'payment',
+						payload: {
+							asset: `{$asset}`,
+							outputs: [
+								{address: "{trigger.address}", amount: "{$rewards.user1.liquid}"},
+								{address: "{$friend}", amount: "{$rewards.user2.liquid}"},
+							]
+						}
+					},
+					{
+						app: 'state',
+						state: `{
+							if ($friendship[$index].accept_ts){
+								var['user_'||trigger.address] = $user1;
+								var['user_'||$friend] = $user2;
+								if (trigger.data.connect){
+									var['friend_'||trigger.address||'_'||$today] = $friend;
+									var['friend_'||$friend||'_'||$today] = trigger.address;
+									var['total_new_user_rewards'] += $rewards.user1.new_user_reward + $rewards.user2.new_user_reward;
+									if ($rewards.referrers){
+										$referrer_totals = {total: 0};
+										foreach($rewards.referrers, 2, ($addr, $reward) => {
+											$user = var['user_'||$addr]; // it can be one of the connecting users whose var has already been updated
+											$user.balance = $user.balance + $reward;
+											$user.referral_rewards = $user.referral_rewards + $reward;
+											var['user_'||$addr] = $user;
+											$referrer_totals.total = $referrer_totals.total + $reward;
+										});
+										var['total_referral_rewards'] += 2 * $referrer_totals.total; // the same reward goes to the referred user
+									}
+								}
+								// users' locked rewards include the referred rewards but not the referrer rewards
+								var['total_locked'] += $rewards.user1.locked + $rewards.user2.locked + $referrer_totals.total;
+							}
+							var[$key] = $friendship;
+						}`
+					}
+				]
+			},
+
+
+
+			// withdraw
+			{
+				if: `{trigger.data.withdraw}`,
+				init: `{
+					$user = var['user_'||trigger.address];
+					require($user, "you are not a user");
+					require(timestamp_to_string(timestamp, 'date') >= $user.unlock_date, "your balance unlocks on "||$user.unlock_date);
+					require($user.balance > 0 OR $user.bytes_balance > 0, "you have no balance");
+				}`,
+				messages: [
+					{
+						app: 'payment',
+						payload: {
+							asset: "base",
+							outputs: [
+								{address: "{trigger.address}", amount: "{$user.bytes_balance}"},
+								{address: '{$governance_aa}', amount: 1000},
+							],
+						}
+					},
+					{
+						app: 'payment',
+						payload: {
+							asset: "{$asset}",
+							outputs: [{address: "{trigger.address}", amount: "{$user.balance}"}],
+						}
+					},
+					{
+						app: 'data',
+						payload: {
+							update_user_balance: 1,
+							address: `{trigger.address}`,
+						}
+					},
+					{
+						app: 'state',
+						state: `{
+							response['message'] = 'Withdrawn';
+							response['event'] = json_stringify({type: 'withdrawal', address: trigger.address, balance: $user.balance, bytes_balance: $user.bytes_balance});
+							var['total_locked'] -= $user.balance;
+							var['total_locked_bytes'] -= $user.bytes_balance;
+							$user.balance = 0;
+							$user.bytes_balance = 0;
+							var['user_'||trigger.address] = $user;
+						}`
+					}
+				]
+			},
+
+
+			// replace bytes with FRD or vice versa
+			{
+				if: `{trigger.data.replace AND ($received_amount > 0 OR $received_bytes_amount > 0)}`,
+				init: `{
+					require(!($received_amount AND $received_bytes_amount), "don't send both tokens");
+					$user = var['user_'||trigger.address];
+					require($user, "you are not a user");
+					if ($received_amount){
+						$out_bytes_amount = floor($received_amount * $ceiling_price);
+						require($user.bytes_balance >= $out_bytes_amount, "not enough bytes locked");
+						$out_amount = 0;
+					}
+					else{ // received bytes
+						$out_amount = floor($received_bytes_amount / $ceiling_price);
+						require($user.balance >= $out_amount, "not enough FRD locked");
+						$out_bytes_amount = 0;
+					}
+				}`,
+				messages: [
+					{
+						app: 'payment',
+						payload: {
+							asset: "base",
+							outputs: [{address: "{trigger.address}", amount: "{$out_bytes_amount}"}],
+						}
+					},
+					{
+						app: 'payment',
+						payload: {
+							asset: "{$asset}",
+							outputs: [{address: "{trigger.address}", amount: "{$out_amount}"}],
+						}
+					},
+					{
+						app: 'state',
+						state: `{
+							response['message'] = 'Replaced';
+							response['event'] = json_stringify({type: 'replace', address: trigger.address, received_amount: $received_amount, received_bytes_amount: $received_bytes_amount, out_amount: $out_amount, out_bytes_amount: $out_bytes_amount});
+							var['total_locked'] += $received_amount - $out_amount;
+							var['total_locked_bytes'] += $received_bytes_amount - $out_bytes_amount;
+							$user.balance = $user.balance + $received_amount - $out_amount;
+							$user.bytes_balance = $user.bytes_balance + $received_bytes_amount - $out_bytes_amount;
+							var['user_'||trigger.address] = $user;
+						}`
+					}
+				]
+			},
+
+
+
+		]
+	}
+}
