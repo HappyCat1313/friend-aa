@@ -9,6 +9,10 @@
 
 		$year = 31536000; // 365 * 24 * 3600;
 
+
+		$get_deposited_supply = () => var['total_locked'];
+		
+
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
 				rewards_aa: 'EJZUDLY4XHCNC7JIX5SOYPU4QJGIPMXG',
