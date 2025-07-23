@@ -151,6 +151,7 @@ describe('Friends', function () {
 					address: this.aliceAddress,
 					profile: {
 						username: 'alice',
+						userId: '123',
 					},
 				}
 			}],
@@ -266,6 +267,7 @@ describe('Friends', function () {
 					address: this.bobAddress,
 					profile: {
 						username: 'bob',
+						userId: '456',
 					},
 				}
 			}],
