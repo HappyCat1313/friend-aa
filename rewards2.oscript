@@ -33,9 +33,33 @@
 			}
 		};
 
-		$get_rewards = ($address1, $address2, $user1, $user2, $ceiling_price, $bFollowup) => {
-			$total_balance1 = $user1.balance + $user1.bytes_balance/$ceiling_price;
-			$total_balance2 = $user2.balance + $user2.bytes_balance/$ceiling_price;
+		$get_deposit_asset_exchange_rate = ($friends_aa, $asset) => {
+			$aa = var[$friends_aa]['deposit_asset_'||$asset];
+			require($aa, "unknown deposit asset");
+			$params = definition[$aa][1].params;
+			$bX = $params.x_asset == $asset AND $params.y_asset == 'base';
+			$bY = $params.x_asset == 'base' AND $params.y_asset == $asset;
+			require($bX OR $bY, "deposit asset must be one of the pool's assets and the other asset must be GBYTE");
+			$recent = var[$aa]['recent'];
+			require($recent AND $recent.current AND $recent.prev, "no recent state of the pool");
+			$pmax = max($recent.current.pmax, $recent.prev.pmax);
+			$pmin = min($recent.current.pmin, $recent.prev.pmin);
+			require($pmin > 0 AND $pmax > 0, "pmin and pmax must be > 0");
+			($bX ? $pmin : 1/$pmax) * 0.9
+		};
+
+		$get_total_balance = ($balances, $ceiling_price, $friends_aa) => {
+			$totals = {in_bytes: $balances.base};
+			$asset_balances = filter($balances, 6, ($a, $balance) => $a != 'base' AND $a != 'frd');
+			foreach($asset_balances, 4, ($a, $balance) => {
+				$totals.in_bytes = $totals.in_bytes + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a);
+			});
+			$balances.frd + $totals.in_bytes / $ceiling_price
+		};
+
+		$get_rewards = ($address1, $address2, $user1, $user2, $ceiling_price, $friends_aa, $bFollowup) => {
+			$total_balance1 = $get_total_balance($user1.balances, $ceiling_price, $friends_aa);
+			$total_balance2 = $get_total_balance($user2.balances, $ceiling_price, $friends_aa);
 			$bNewUser = !$user1.last_date OR !$user2.last_date;
 			$capped_total_balance1 = $bNewUser ? $total_balance1 : min($total_balance1, $balance_cap);
 			$capped_total_balance2 = $bNewUser ? $total_balance2 : min($total_balance2, $balance_cap);

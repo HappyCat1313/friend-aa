@@ -13,7 +13,8 @@
   "dependencies": {
     "aa-testkit": "git+https://github.com/valyakin/aa-testkit.git",
     "chai": "^4.2.0",
-    "mocha": "^6.2.0"
+    "mocha": "^6.2.0",
+    "oswap-v2-aa": "git+https://github.com/byteball/oswap-v2-aa"
   },
   "devDependencies": {
     "eslint": "^6.3.0",

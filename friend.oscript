@@ -15,7 +15,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'EJZUDLY4XHCNC7JIX5SOYPU4QJGIPMXG',
+				rewards_aa: 'SY233BR7U2ANZ3OVFNE77HUFFRMUUWKN',
 				messaging_attestors: '',
 				real_name_attestors: '',
 				referrer_deposit_reward_share: 0.01,
@@ -56,6 +56,24 @@
 			$res.desc
 		};
 
+		$get_deposit_asset_exchange_rates_on_aa = ($deposit_asset, $aa) => {
+			$params = definition[$aa][1].params;
+			$bX = $params.x_asset == $deposit_asset AND $params.y_asset == 'base';
+			$bY = $params.x_asset == 'base' AND $params.y_asset == $deposit_asset;
+			require($bX OR $bY, "deposit asset must be one of the pool's assets and the other asset must be GBYTE");
+			$recent = var[$aa]['recent'];
+			require($recent AND $recent.current AND $recent.prev, "no recent state of the pool");
+			$pmax = max($recent.current.pmax, $recent.prev.pmax);
+			$pmin = min($recent.current.pmin, $recent.prev.pmin);
+			require($pmin > 0 AND $pmax > 0, "pmin and pmax must be > 0");
+			{min: ($bX ? $pmin : 1/$pmax) * 0.9, max: ($bX ? $pmax : 1/$pmin) * 1.1}
+		};
+
+		$get_deposit_asset_exchange_rates = ($deposit_asset) => {
+			$aa = var['deposit_asset_'||$deposit_asset];
+			require($aa, "unknown deposit asset");
+			$get_deposit_asset_exchange_rates_on_aa($deposit_asset, $aa)
+		};
 
 	}`,
 	init: `{
@@ -77,9 +95,13 @@
 		if ($asset)
 			$received_amount = trigger.output[[asset=$asset]];
 		$received_bytes_amount = max(trigger.output[[asset=base]] - 10000, 0);
+		$deposit_asset = trigger.data.deposit_asset;
+		if ($deposit_asset AND trigger.address != $governance_aa){
+			$received_deposit_asset_amount = trigger.output[[asset=$deposit_asset]];
+			$exchange_rates = $get_deposit_asset_exchange_rates($deposit_asset);
+		}
 
-
-		$governance_base_aa = '2GLKGKLGH4I6EGBMSQ3BNDO3LJAYEBQI';
+		$governance_base_aa = 'HLS5AQTAYN3YZ6LHOOHAAWTBYUID2SEL';
 
 	}`,
 	messages: {
@@ -141,8 +163,14 @@
 					{
 						app: 'state',
 						state: `{
-							$variables[$name] = $value;
-							var['variables'] = $variables;
+							if ($name == 'deposit_asset'){
+								require(length(trigger.data.deposit_asset) == 44, "invalid deposit asset");
+								var['deposit_asset_'||trigger.data.deposit_asset] = $value;
+							}
+							else {
+								$variables[$name] = $value;
+								var['variables'] = $variables;
+							}
 						}`
 					}
 				]
@@ -152,7 +180,7 @@
 			// deposit
 			{
 				if: `{
-					($received_amount > 0 OR $received_bytes_amount > 0 OR trigger.data.term) AND trigger.data.deposit
+					($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount OR trigger.data.term) AND trigger.data.deposit
 				}`,
 				init: `{
 					$username = attestation[[attestors=$variables.messaging_attestors, address=trigger.address, ifnone=false]].username;
@@ -164,10 +192,10 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balance: 0, bytes_balance: 0, unlock_date: false, reg_ts: timestamp};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp};
 					$bNewUser = !$user.unlock_date;
 
-					$total_balance = $user.balance + $received_amount + ($user.bytes_balance + $received_bytes_amount)/$ceiling_price;
+					$total_balance = $user.balances.frd + $received_amount + ($user.balances.base + $received_bytes_amount + ($deposit_asset ? ($user.balances[$deposit_asset] + $received_deposit_asset_amount) * $exchange_rates.min : 0))/$ceiling_price;
 					$bBigDeposit = $total_balance >= $variables.min_balance_instead_of_real_name;
 					if (!$bBigDeposit)
 						$user_id = attestation[[attestors=$variables.real_name_attestors, address=trigger.address, ifnone=false]].user_id;
@@ -210,14 +238,18 @@
 						app: 'payment',
 						payload: {
 							asset: `{$asset}`,
-							outputs: [{address: "{$user.ref}", amount: "{floor(($received_amount + $received_bytes_amount/$ceiling_price) * $variables.referrer_deposit_reward_share)}"}]
+							outputs: [{address: "{$user.ref}", amount: "{floor(($received_amount + ($received_bytes_amount + $received_deposit_asset_amount * $exchange_rates.min)/$ceiling_price) * $variables.referrer_deposit_reward_share)}"}]
 						}
 					},
 					{
 						app: 'state',
 						state: `{
-							$user.balance = $user.balance + $received_amount;
-							$user.bytes_balance = $user.bytes_balance + $received_bytes_amount;
+							$user.balances.frd = $user.balances.frd + $received_amount;
+							$user.balances.base = $user.balances.base + $received_bytes_amount;
+							if ($deposit_asset){
+								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount;
+								require(length($user.balances) <= 4, "maximum 4 deposit assets allowed, remove some old ones before adding new assets");
+							}
 							$user.unlock_date = $new_unlock_date;
 							var['user_'||trigger.address] = $user;
 							if ($bNewUser AND $user_id)
@@ -226,10 +258,10 @@
 							var['total_locked'] += $received_amount;
 							var['total_locked_bytes'] += $received_bytes_amount;
 
-							if ($received_amount > 0 OR $received_bytes_amount > 0)
+							if ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)
 								response['message'] = "Deposited";
 							response['unlock_date'] = $new_unlock_date;
-							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount});
+							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset});
 						}`
 					}
 				]
@@ -278,7 +310,7 @@
 						require($elapsed_days <= $days + $followup_claim_term, "too late");
 					}
 
-					$rewards = $variables.rewards_aa#10.$get_rewards(trigger.address, $friend, $user1, $user2, $ceiling_price, !trigger.data.connect);
+					$rewards = $variables.rewards_aa#26.$get_rewards(trigger.address, $friend, $user1, $user2, $ceiling_price, this_address, !trigger.data.connect);
 					if (!trigger.data.connect){ // followup, multiply all rewards by followup_reward_share
 						$rewards.user1.locked = floor($rewards.user1.locked * $friendship.followup_reward_share);
 						$rewards.user1.liquid = floor($rewards.user1.liquid * $friendship.followup_reward_share);
@@ -307,8 +339,8 @@
 							}
 							else{ // pay rewards
 								$friendship[$index].accept_ts = timestamp;
-								$user1.balance = $user1.balance + $rewards.user1.locked;
-								$user2.balance = $user2.balance + $rewards.user2.locked;
+								$user1.balances.frd = $user1.balances.frd + $rewards.user1.locked;
+								$user2.balances.frd = $user2.balances.frd + $rewards.user2.locked;
 								if (trigger.data.connect){
 									$user1.last_date = $today;
 									$user2.last_date = $today;
@@ -351,7 +383,7 @@
 										$referrer_totals = {total: 0};
 										foreach($rewards.referrers, 2, ($addr, $reward) => {
 											$user = var['user_'||$addr]; // it can be one of the connecting users whose var has already been updated
-											$user.balance = $user.balance + $reward;
+											$user.balances.frd = $user.balances.frd + $reward;
 											$user.referral_rewards = $user.referral_rewards + $reward;
 											var['user_'||$addr] = $user;
 											$referrer_totals.total = $referrer_totals.total + $reward;
@@ -377,7 +409,7 @@
 					$user = var['user_'||trigger.address];
 					require($user, "you are not a user");
 					require(timestamp_to_string(timestamp, 'date') >= $user.unlock_date, "your balance unlocks on "||$user.unlock_date);
-					require($user.balance > 0 OR $user.bytes_balance > 0, "you have no balance");
+					require($user.balances.frd > 0 OR $user.balances.base > 0 OR $deposit_asset AND $user.balances[$deposit_asset] > 0, "you have no balance");
 				}`,
 				messages: [
 					{
@@ -385,7 +417,7 @@
 						payload: {
 							asset: "base",
 							outputs: [
-								{address: "{trigger.address}", amount: "{$user.bytes_balance}"},
+								{address: "{trigger.address}", amount: "{$user.balances.base}"},
 								{address: '{$governance_aa}', amount: 1000},
 							],
 						}
@@ -394,7 +426,15 @@
 						app: 'payment',
 						payload: {
 							asset: "{$asset}",
-							outputs: [{address: "{trigger.address}", amount: "{$user.balance}"}],
+							outputs: [{address: "{trigger.address}", amount: "{$user.balances.frd}"}],
+						}
+					},
+					{
+						if: `{$deposit_asset}`,
+						app: 'payment',
+						payload: {
+							asset: "{$deposit_asset}",
+							outputs: [{address: "{trigger.address}", amount: "{$user.balances[$deposit_asset]}"}],
 						}
 					},
 					{
@@ -408,11 +448,13 @@
 						app: 'state',
 						state: `{
 							response['message'] = 'Withdrawn';
-							response['event'] = json_stringify({type: 'withdrawal', address: trigger.address, balance: $user.balance, bytes_balance: $user.bytes_balance});
-							var['total_locked'] -= $user.balance;
-							var['total_locked_bytes'] -= $user.bytes_balance;
-							$user.balance = 0;
-							$user.bytes_balance = 0;
+							response['event'] = json_stringify({type: 'withdrawal', address: trigger.address, balance: $user.balances.frd, bytes_balance: $user.balances.base, deposit_asset_balance: $deposit_asset ? $user.balances[$deposit_asset] : 0, deposit_asset: $deposit_asset});
+							var['total_locked'] -= $user.balances.frd;
+							var['total_locked_bytes'] -= $user.balances.base;
+							$user.balances.frd = 0;
+							$user.balances.base = 0;
+							if ($deposit_asset)
+								$user.balances[$deposit_asset] = 0;
 							var['user_'||trigger.address] = $user;
 						}`
 					}
@@ -422,46 +464,72 @@
 
 			// replace bytes with FRD or vice versa
 			{
-				if: `{trigger.data.replace AND ($received_amount > 0 OR $received_bytes_amount > 0)}`,
+				if: `{trigger.data.replace AND ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)}`,
 				init: `{
-					require(!($received_amount AND $received_bytes_amount), "don't send both tokens");
+					require(($received_amount?1:0) + ($received_bytes_amount?1:0) + ($received_deposit_asset_amount?1:0) == 1, "don't send more than one token");
 					$user = var['user_'||trigger.address];
 					require($user, "you are not a user");
-					if ($received_amount){
-						$out_bytes_amount = floor($received_amount * $ceiling_price);
-						require($user.bytes_balance >= $out_bytes_amount, "not enough bytes locked");
-						$out_amount = 0;
+					$out_amounts = {base: 0, frd: 0, deposit_asset: 0};
+					if ($deposit_asset){
+						if ($received_deposit_asset_amount){
+							$out_amounts.frd = floor($received_deposit_asset_amount * $exchange_rates.min / $ceiling_price);
+						}
+						else if ($received_amount){
+							$out_amounts.deposit_asset = floor($received_amount * $ceiling_price / $exchange_rates.max);
+							require($user.balances[$deposit_asset] >= $out_amounts.deposit_asset, "not enough deposit asset locked");
+						}
+						else
+							bounce("bytes are not swapped for deposit assets");
 					}
-					else{ // received bytes
-						$out_amount = floor($received_bytes_amount / $ceiling_price);
-						require($user.balance >= $out_amount, "not enough FRD locked");
-						$out_bytes_amount = 0;
+					else if ($received_amount){
+						$out_amounts.base = floor($received_amount * $ceiling_price);
+						require($user.balances.base >= $out_amounts.base, "not enough bytes locked");
 					}
+					else if ($received_bytes_amount){ // received bytes
+						$out_amounts.frd = floor($received_bytes_amount / $ceiling_price);
+					}
+
+					if ($out_amounts.frd)
+						require($user.balances.frd >= $out_amounts.frd, "not enough FRD locked");
 				}`,
 				messages: [
 					{
 						app: 'payment',
 						payload: {
 							asset: "base",
-							outputs: [{address: "{trigger.address}", amount: "{$out_bytes_amount}"}],
+							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.base}"}],
 						}
 					},
 					{
 						app: 'payment',
 						payload: {
 							asset: "{$asset}",
-							outputs: [{address: "{trigger.address}", amount: "{$out_amount}"}],
+							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.frd}"}],
+						}
+					},
+					{
+						if: "{$out_amounts.deposit_asset}",
+						app: 'payment',
+						payload: {
+							asset: "{$deposit_asset}",
+							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.deposit_asset}"}],
 						}
 					},
 					{
 						app: 'state',
 						state: `{
 							response['message'] = 'Replaced';
-							response['event'] = json_stringify({type: 'replace', address: trigger.address, received_amount: $received_amount, received_bytes_amount: $received_bytes_amount, out_amount: $out_amount, out_bytes_amount: $out_bytes_amount});
-							var['total_locked'] += $received_amount - $out_amount;
-							var['total_locked_bytes'] += $received_bytes_amount - $out_bytes_amount;
-							$user.balance = $user.balance + $received_amount - $out_amount;
-							$user.bytes_balance = $user.bytes_balance + $received_bytes_amount - $out_bytes_amount;
+							response['event'] = json_stringify({type: 'replace', address: trigger.address, received_amount: $received_amount, received_bytes_amount: $received_bytes_amount, received_deposit_asset_amount: $received_deposit_asset_amount, out_amount: $out_amounts.frd, out_bytes_amount: $out_amounts.base, out_deposit_asset_amount: $out_amounts.deposit_asset, deposit_asset: $deposit_asset});
+							var['total_locked'] += $received_amount - $out_amounts.frd;
+							var['total_locked_bytes'] += $received_bytes_amount - $out_amounts.base;
+							$user.balances.frd = $user.balances.frd + $received_amount - $out_amounts.frd;
+							$user.balances.base = $user.balances.base + $received_bytes_amount - $out_amounts.base;
+							if ($deposit_asset){
+								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount - $out_amounts.deposit_asset;
+								if ($user.balances[$deposit_asset] == 0)
+									delete($user.balances, $deposit_asset);
+								require(length($user.balances) <= 4, "maximum 4 deposit assets allowed, remove some old ones before adding new assets");
+							}
 							var['user_'||trigger.address] = $user;
 						}`
 					}

@@ -15,8 +15,9 @@
 			'referrer_deposit_reward_share',
 			'followup_reward_share',
 			'min_balance_instead_of_real_name',
+			'deposit_asset',
 		];
-		$count_names = 6;
+		$count_names = 7;
 		require(length($names) == $count_names, "wrong number of governable parameters");
 		
 		$is_allowed_name = $name => {
@@ -34,7 +35,8 @@
 				return 0;
 			}
 			
-			$balance = $user.balance + $user.bytes_balance / $friend_aa#2.$get_ceiling_price();
+			// balances in deposit assets don't count
+			$balance = $user.balances.frd + $user.balances.base / $friend_aa#2.$get_ceiling_price();
 			if (!$balance){
 				if ($bThrow)
 					bounce("you have no locked balance and cannot vote");
@@ -55,16 +57,26 @@
 				if: `{ trigger.data.name AND trigger.data.commit }`,
 				init: `{
 					$name = trigger.data.name;
-					$leader = var['leader_' || $name];
+					if ($name == 'deposit_asset'){
+						$deposit_asset = trigger.data.deposit_asset;
+						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44, "invalid deposit asset");
+						$full_name = $name||'_'||$deposit_asset;
+					}
+					else
+						$full_name = $name;
+					
+					$leader = var['leader_' || $full_name];
 					require(exists($leader), "no leader"); // can be 0
-					$current_value = var[$name];
+					$current_value = var[$full_name];
 					if (exists($current_value) AND $leader == $current_value)
 						bounce("already equal to leader");
-					require(var['challenging_period_start_ts_' || $name] + $challenging_period < timestamp, "challenging period not expired yet");
+					require(var['challenging_period_start_ts_' || $full_name] + $challenging_period < timestamp, "challenging period not expired yet");
 					$payload = {
 						name: $name,
 						value: $leader,
 					};
+					if ($name == 'deposit_asset')
+						$payload.deposit_asset = $deposit_asset;
 				}`,
 				messages: [
 					// ping the friend_aa to record the new value
@@ -84,7 +96,7 @@
 					{
 						app: 'state',
 						state: `{
-							var[$name] = $leader;
+							var[$full_name] = $leader;
 						}`
 					}
 				]
@@ -98,14 +110,24 @@
 					$name = trigger.data.name;
 					$value = trigger.data.value; // can be empty to remove one's vote
 					require($is_allowed_name($name), "unknown name: " || $name);
+					if ($name == 'deposit_asset'){
+						$deposit_asset = trigger.data.deposit_asset;
+						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44, "invalid deposit asset");
+						$full_name = $name||'_'||$deposit_asset;
+					}
+					else
+						$full_name = $name;
 
 					$sqrt_balance = $get_sqrt_balance(trigger.address, true);
 
 					if (exists($value)){
-						if ($name == 'rewards_aa' OR $name == 'messaging_attestors' OR $name == 'real_name_attestors'){
+						if ($name == 'rewards_aa' OR $name == 'messaging_attestors' OR $name == 'real_name_attestors' OR $name == 'deposit_asset'){
 							require(typeof($value) == 'string', "must be a string");
-							if ($name == 'rewards_aa')
+							if ($name == 'rewards_aa' OR $name == 'deposit_asset'){
 								require(is_aa($value), "not an AA");
+								if ($name == 'deposit_asset') // just check that it doesn't throw
+									$friend_aa#2.$get_deposit_asset_exchange_rates_on_aa($deposit_asset, $value);
+							}
 							else{
 								$arr = split($value, ':');
 								require(length($arr) > 0, "no attestors");
@@ -126,21 +148,21 @@
 						app: 'state',
 						state: `{
 							$votes = var['votes_'||trigger.address] OTHERWISE {};
-							$prev_choice = $votes[$name];
-							$leader = var['leader_' || $name];
-							var['choice_' || trigger.address || '_' || $name] = $value;
+							$prev_choice = $votes[$full_name];
+							$leader = var['leader_' || $full_name];
+							var['choice_' || trigger.address || '_' || $full_name] = $value;
 							if (exists($prev_choice)){
 								$prev_choice_key = $get_value_key($prev_choice.value);
-								var['support_' || $name || '_' || $prev_choice_key] -= $prev_choice.sqrt_balance;
-								delete($votes, $name);
+								var['support_' || $full_name || '_' || $prev_choice_key] -= $prev_choice.sqrt_balance;
+								delete($votes, $full_name);
 							}
 							if (exists($value)){
 								$value_key = $get_value_key($value);
-								var['support_' || $name || '_' || $value_key] += $sqrt_balance;
-								$votes[$name] = { value: $value, sqrt_balance: $sqrt_balance };
-								if (!exists($leader) OR var['support_' || $name || '_' || $value_key] > var['support_' || $name || '_' || $get_value_key($leader)]){
-									var['leader_' || $name] = $value;
-									var['challenging_period_start_ts_' || $name] = timestamp;
+								var['support_' || $full_name || '_' || $value_key] += $sqrt_balance;
+								$votes[$full_name] = { value: $value, sqrt_balance: $sqrt_balance };
+								if (!exists($leader) OR var['support_' || $full_name || '_' || $value_key] > var['support_' || $full_name || '_' || $get_value_key($leader)]){
+									var['leader_' || $full_name] = $value;
+									var['challenging_period_start_ts_' || $full_name] = timestamp;
 								}
 							}
 							var['votes_'||trigger.address] = $votes;

@@ -31,4 +31,42 @@ chai.use((_chai, utils) => {
 		const check = Utils.isValidBase64(unit, 44) && unit.endsWith('=')
 		new chai.Assertion(check).to.be.equal(!negate, !check && `'${JSON.stringify(unit)}' is not valid unit`)
 	})
+
+	
+	chai.Assertion.addMethod("deepCloseTo", function (expected, delta, msg) {
+		let actual = utils.flag(this, "object");
+	//	console.log({ actual, expected })
+
+		new chai.Assertion(typeof actual).to.be.eq(typeof expected, 'type mismatch')
+
+		if (typeof actual !== 'object') {
+			if (typeof actual === 'number' && delta)
+				return this.closeTo(expected, delta, msg);
+			else
+				return this.equal(expected, msg);
+		}
+
+		new chai.Assertion(Array.isArray(actual)).to.be.eq(Array.isArray(expected), 'comparing object and array')
+
+		msg = msg || "";
+		if (Array.isArray(actual)) {
+			new chai.Assertion(actual.length).to.be.eq(expected.length, 'array length mismatch')
+			actual = sortDeep(actual)
+			expected = sortDeep(expected)
+			for (let i = 0, imax = actual.length; i < imax; ++i) {
+			//	console.log('array', i, actual[i])
+				new chai.Assertion(actual[i]).deepCloseTo(expected[i], delta, msg + "[" + i + "]");
+			}
+		}
+		else {
+			new chai.Assertion(Object.keys(actual).length).to.be.eq(Object.keys(expected).length, 'object length mismatch')
+			for (let key in actual) {
+			//	console.log('object', key, actual[key])
+				new chai.Assertion(actual[key]).deepCloseTo(expected[key], delta, msg + "[" + key + "]");
+			}
+		}
+
+		//	return this;
+	});
+
 })

@@ -20,12 +20,33 @@ describe('Friends', function () {
 
 	before(async () => {
 
+		// oswap stuff
+		const pool_lib = fs.readFileSync(path.join(__dirname, '../node_modules/oswap-v2-aa/pool-lib.oscript'), 'utf8');
+		const pool_lib_address = await getAaAddress(pool_lib);
+		const pool_lib_by_price = fs.readFileSync(path.join(__dirname, '../node_modules/oswap-v2-aa/pool-lib-by-price.oscript'), 'utf8');
+		const pool_lib_by_price_address = await getAaAddress(pool_lib_by_price);
+		let pool_base = fs.readFileSync(path.join(__dirname, '../node_modules/oswap-v2-aa/pool.oscript'), 'utf8');
+		pool_base = pool_base.replace(/\$pool_lib_aa = '\w{32}'/, `$pool_lib_aa = '${pool_lib_address}'`)
+		pool_base = pool_base.replace(/\$pool_lib_by_price_aa = '\w{32}'/, `$pool_lib_by_price_aa = '${pool_lib_by_price_address}'`)
+		const pool_base_address = await getAaAddress(pool_base);
+		let factory = fs.readFileSync(path.join(__dirname, '../node_modules/oswap-v2-aa/factory.oscript'), 'utf8');
+		factory = factory.replace(/\$pool_base_aa = '\w{32}'/, `$pool_base_aa = '${pool_base_address}'`)
+
 		this.network = await Network.create()
 			.with.numberOfWitnesses(1)
+			.with.asset({ usdc: {} })
 			.with.agent({ governance_base: path.join(__dirname, '../governance.oscript') })
 			.with.agent({ rewards_aa: path.join(__dirname, '../rewards.oscript') })
 			.with.agent({ rewards2_aa: path.join(__dirname, '../rewards2.oscript') })
-			.with.wallet({ alice: 1000e9 })
+
+			.with.agent({ lbc: path.join(__dirname, '../node_modules/oswap-v2-aa/linear-bonding-curve.oscript') })
+			.with.agent({ pool_lib: path.join(__dirname, '../node_modules/oswap-v2-aa/pool-lib.oscript') })
+			.with.agent({ pool_lib_by_price: path.join(__dirname, '../node_modules/oswap-v2-aa/pool-lib-by-price.oscript') })
+			.with.agent({ pool_base })
+			.with.agent({ oswap_governance_base: path.join(__dirname, '../node_modules/oswap-v2-aa/governance.oscript') })
+			.with.agent({ factory })
+
+			.with.wallet({ alice: {base: 1000e9, usdc: 10000e4} })
 			.with.wallet({ bob: 1000e9 })
 			.with.wallet({ carol: 1000e9 })
 			.with.wallet({ messagingAttestor: 1e9 })
@@ -51,6 +72,7 @@ describe('Friends', function () {
 		this.rewards_aa_address = await this.network.agent.rewards_aa
 		this.rewards2_aa_address = await this.network.agent.rewards2_aa
 
+		this.usdc = this.network.asset.usdc
 
 		this.timetravel = async (shift = '1d') => {
 			const { error, timestamp } = await this.network.timetravel({ shift })
@@ -75,6 +97,9 @@ describe('Friends', function () {
 			return result
 		}
 
+		this.get_price = async (asset_label, bAfterInterest = true) => {
+			return await this.executeGetter(this.pool_aa, 'get_price', [asset_label, 0, 0, bAfterInterest])
+		}
 
 
 	})
@@ -246,11 +271,377 @@ describe('Friends', function () {
 
 		this.total_locked_bytes = amount
 		this.alice_profile = {
-			balance: 0,
-			bytes_balance: amount,
+			balances: {
+				frd: 0,
+				base: amount,
+			},
 			unlock_date,
 			reg_ts: response.timestamp,
 		}
+
+		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
+		expect(vars.total_locked).to.eq(0)
+		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
+	})
+
+
+	it('Bob defines a new pool', async () => {
+		this.x_asset = 'base'
+		this.y_asset = this.usdc
+		this.base_interest_rate = 0.1
+		this.swap_fee = 0.003
+		this.exit_fee = 0.005
+		this.leverage_profit_tax = 0.1
+		this.arb_profit_tax = 0.9
+		this.alpha = 0.5
+		this.beta = 1 - this.alpha
+		this.pool_leverage = 10
+		const { unit, error } = await this.bob.triggerAaWithData({
+			toAddress: this.network.agent.factory,
+			amount: 10000,
+			data: {
+				x_asset: this.x_asset,
+				y_asset: this.y_asset,
+				swap_fee: this.swap_fee,
+				exit_fee: this.exit_fee,
+				leverage_profit_tax: this.leverage_profit_tax,
+				arb_profit_tax: this.arb_profit_tax,
+				base_interest_rate: this.base_interest_rate,
+				alpha: this.alpha,
+				mid_price: this.mid_price,
+				price_deviation: this.price_deviation,
+				pool_leverage: this.pool_leverage,
+			},
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.bob, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+	//	await this.network.witnessUntilStable(response.response_unit)
+
+		this.pool_aa = response.response.responseVars.address
+		expect(this.pool_aa).to.be.validAddress
+
+		const { vars } = await this.bob.readAAStateVars(this.pool_aa)
+		this.shares_asset = vars.lp_shares.asset
+		expect(this.shares_asset).to.be.validUnit
+
+		this.linear_shares = 0
+		this.issued_shares = 0
+		this.coef = 1
+		this.balances = { x: 0, y: 0, xn: 0, yn: 0 }
+		this.profits = { x: 0, y: 0 }
+		this.leveraged_balances = {}
+
+		this.bounce_fees = this.x_asset !== 'base' && { base: [{ address: this.pool_aa, amount: 1e4 }] }
+		this.bounce_fee_on_top = this.x_asset === 'base' ? 1e4 : 0
+	})
+	
+	
+	it('Alice adds liquidity', async () => {
+		const x_amount = 1e9
+		const y_amount = 100e4
+		this.initial_price = this.alpha / this.beta * y_amount / x_amount
+		const new_linear_shares = this.mid_price
+			? Math.round(x_amount * this.mid_price ** this.beta * this.price_deviation / (this.price_deviation - 1))
+			: Math.round(x_amount ** this.alpha * y_amount ** this.beta)
+		this.balances.x += x_amount * this.pool_leverage
+		this.balances.y += y_amount * this.pool_leverage
+		this.balances.xn += x_amount
+		this.balances.yn += y_amount
+		const new_issued_shares = new_linear_shares
+		this.linear_shares += new_linear_shares
+		this.issued_shares += new_issued_shares
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				[this.x_asset]: [{ address: this.pool_aa, amount: x_amount + this.bounce_fee_on_top }],
+				[this.y_asset]: [{ address: this.pool_aa, amount: y_amount }],
+				...this.bounce_fees
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					buy_shares: 1,
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+	//	await this.network.witnessUntilStable(response.response_unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		const { unitObj } = await this.alice.getUnitInfo({ unit: response.response_unit })
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.shares_asset,
+				address: this.aliceAddress,
+				amount: new_issued_shares,
+			},
+		])
+
+		this.recent = {
+			last_ts: response.timestamp,
+		}
+
+		const { vars } = await this.alice.readAAStateVars(this.pool_aa)
+		expect(vars.lp_shares.issued).to.be.eq(this.issued_shares)
+		expect(vars.lp_shares.linear).to.be.eq(this.linear_shares)
+		expect(vars.lp_shares.coef).to.be.eq(this.coef)
+		expect(vars.balances).to.be.deep.eq(this.balances)
+		expect(vars.leveraged_balances).to.be.deep.eq(this.leveraged_balances)
+		expect(vars.profits).to.be.deep.eq(this.profits)
+		expect(vars.recent).to.be.deep.eq(this.recent)
+	})
+
+
+	it("Alice votes for adding USDC before any trades in the pool", async () => {
+		const name = 'deposit_asset'
+		const deposit_asset = this.usdc
+		const value = this.pool_aa
+		const { unit, error } = await this.alice.triggerAaWithData({
+			toAddress: this.governance_aa,
+			amount: 10000,
+			data: {
+				name,
+				deposit_asset,
+				value,
+			},
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		expect(response.response.error).to.include("no recent state of the pool")
+		expect(response.bounced).to.be.true
+		expect(response.response_unit).to.be.null
+	})
+
+
+	it('Alice swaps', async () => {
+		// get the initial price
+		const initial_price = await this.get_price('x')
+		console.log({ initial_price })
+
+		const final_price = initial_price * 1.1
+		const result = await this.executeGetter(this.pool_aa, 'get_swap_amounts_by_final_price', ['y', final_price])
+		const { in: y_amount, out: net_x_amount, arb_profit_tax, fees } = result
+		const x_amount = net_x_amount + fees.out
+
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				base: [{address: this.pool_aa, amount: 1e4}],
+				[this.y_asset]: [{address: this.pool_aa, amount: y_amount}],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					final_price: final_price,
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+	//	await this.network.witnessUntilStable(response.response_unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		this.recent.prev = false
+		this.recent.current = {
+			start_ts: Math.floor(response.timestamp / 3600) * 3600,
+			pmin: this.initial_price,
+			pmax: final_price,
+		}
+		this.recent.last_trade = {
+			address: this.aliceAddress,
+			pmin: this.initial_price,
+			pmax: final_price,
+			amounts: { x: x_amount, y: 0 },
+			paid_taxes: { x: arb_profit_tax, y: 0 },
+		}
+		const { vars } = await this.alice.readAAStateVars(this.pool_aa)
+		expect(vars.recent).to.be.deepCloseTo(this.recent, 0.000001)
+	})
+
+
+	it('Alice swaps again 1 hour later', async () => {
+		await this.timetravel('1h')
+		// get the initial price
+		const initial_price = await this.get_price('x')
+		console.log({ initial_price })
+
+		const final_price = initial_price * 1.1
+		const result = await this.executeGetter(this.pool_aa, 'get_swap_amounts_by_final_price', ['y', final_price])
+		const { in: y_amount, out: net_x_amount, arb_profit_tax, fees } = result
+		const x_amount = net_x_amount + fees.out
+
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				base: [{address: this.pool_aa, amount: 1e4}],
+				[this.y_asset]: [{address: this.pool_aa, amount: y_amount}],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					final_price: final_price,
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+	//	await this.network.witnessUntilStable(response.response_unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		this.recent.prev = this.recent.current
+		this.recent.current = {
+			start_ts: Math.floor(response.timestamp / 3600) * 3600,
+			pmin: initial_price,
+			pmax: final_price,
+		}
+		this.recent.last_trade = {
+			address: this.aliceAddress,
+			pmin: initial_price,
+			pmax: final_price,
+			amounts: { x: x_amount, y: 0 },
+			paid_taxes: { x: arb_profit_tax, y: 0 },
+		}
+		this.recent.last_ts = response.timestamp
+		const { vars } = await this.alice.readAAStateVars(this.pool_aa)
+		expect(vars.recent).to.be.deepCloseTo(this.recent, 0.000001)
+	})
+
+
+	it("Alice votes for adding USDC", async () => {
+		const timestamp = await this.timetravel('0d')
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+		const balance = this.alice_profile.balances.base / ceiling_price + this.alice_profile.balances.frd
+		const sqrt_balance = +Math.sqrt(balance).toPrecision(15)
+
+		const name = 'deposit_asset'
+		const deposit_asset = this.usdc
+		const full_name = name + '_' + deposit_asset
+		const value = this.pool_aa
+		const { unit, error } = await this.alice.triggerAaWithData({
+			toAddress: this.governance_aa,
+			amount: 10000,
+			data: {
+				name,
+				deposit_asset,
+				value,
+			},
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		console.log(response.response.error)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.null
+
+		this.aliceVotes = {
+			[full_name]: {
+				value,
+				sqrt_balance,
+			},
+		}
+
+		const { vars: friend_vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(friend_vars['variables']).to.be.undefined
+
+		const { vars } = await this.alice.readAAStateVars(this.governance_aa)
+		expect(vars['support_' + full_name + '_' + value]).to.be.closeTo(sqrt_balance, 0.00001)
+		expect(vars['leader_' + full_name]).to.eq(value)
+		expect(vars['challenging_period_start_ts_' + full_name]).to.eq(response.timestamp)
+		expect(vars['choice_' + this.aliceAddress + '_' + full_name]).to.eq(value)
+		expect(vars['votes_' + this.aliceAddress]).to.be.deepCloseTo(this.aliceVotes, 0.00001)
+	})
+
+
+	it("Alice commits the new deposit asset", async () => {
+		await this.timetravel('4d')
+		const name = 'deposit_asset'
+		const deposit_asset = this.usdc
+		const full_name = name + '_' + deposit_asset
+		const value = this.pool_aa
+		const { unit, error } = await this.alice.triggerAaWithData({
+			toAddress: this.governance_aa,
+			amount: 10_000,
+			data: {
+				name,
+				deposit_asset,
+				commit: 1,
+			},
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		console.log(response.response.error)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		const { vars } = await this.alice.readAAStateVars(this.governance_aa)
+		expect(vars[name]).to.be.undefined
+		expect(vars[full_name]).to.be.eq(value)
+
+		const { vars: friend_vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(friend_vars.variables).to.be.undefined
+		expect(friend_vars['deposit_asset_' + deposit_asset]).to.eq(this.pool_aa)
+	})
+
+
+	it('Alice deposits USDC', async () => {
+		const amount = 1000e4
+		console.log(`paying ${amount/1e4} USDC`)
+
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				[this.usdc]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					deposit: 1,
+					deposit_asset: this.usdc,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.null
+		expect(response.response.responseVars.message).to.eq("Deposited")
+		const unlock_date = new Date((response.timestamp + 365 * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
+
+		this.alice_profile.balances[this.usdc] = amount
+		this.alice_profile.unlock_date = unlock_date
+		this.ts = response.timestamp
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
@@ -278,8 +669,8 @@ describe('Friends', function () {
 	})
 
 
-	it('Bob deposits 501 GB without real-name attestation', async () => {
-		const amount = 501e9
+	it('Bob deposits 505 GB without real-name attestation', async () => {
+		const amount = 505e9
 		console.log(`paying ${amount/1e9} GB`)
 
 		const { unit, error } = await this.bob.triggerAaWithData({
@@ -303,8 +694,10 @@ describe('Friends', function () {
 
 		this.total_locked_bytes += amount
 		this.bob_profile = {
-			balance: 0,
-			bytes_balance: amount,
+			balances: {
+				frd: 0,
+				base: amount,
+			},
 			unlock_date,
 			reg_ts: response.timestamp,
 		}
@@ -317,11 +710,17 @@ describe('Friends', function () {
 
 
 	it('Alice and Bob become friends', async () => {
+		const timestamp = await this.timetravel('0d')
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+
 		const pair = this.aliceAddress < this.bobAddress ? this.aliceAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.aliceAddress
 
-		const alice_balance = this.alice_profile.bytes_balance
-		const bob_balance = this.bob_profile.bytes_balance
-		const new_user_reward = Math.min(10e9, alice_balance, bob_balance)
+		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
+		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
+
+		const alice_balance = (this.alice_profile.balances.base + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes) / ceiling_price
+		const bob_balance = this.bob_profile.balances.base / ceiling_price
+		const new_user_reward = Math.floor(Math.min(10e9, alice_balance, bob_balance))
 		const alice_liquid = Math.floor(alice_balance * 0.001)
 		const alice_locked = Math.floor(alice_balance * 0.01) + new_user_reward
 		const bob_liquid = Math.floor(bob_balance * 0.001)
@@ -342,6 +741,7 @@ describe('Friends', function () {
 		expect(alice_unit).to.be.validUnit
 
 		const { response: alice_response } = await this.network.getAaResponseToUnitOnNode(this.alice, alice_unit)
+		console.log(alice_response.response.error)
 		expect(alice_response.response.error).to.be.undefined
 		expect(alice_response.bounced).to.be.false
 		expect(alice_response.response_unit).to.be.null
@@ -385,10 +785,10 @@ describe('Friends', function () {
 			}
 		})
 		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
-		this.alice_profile.balance = alice_locked
+		this.alice_profile.balances.frd = alice_locked
 		this.alice_profile.new_user_rewards = new_user_reward
 		this.alice_profile.last_date = today
-		this.bob_profile.balance = bob_locked
+		this.bob_profile.balances.frd = bob_locked
 		this.bob_profile.new_user_rewards = new_user_reward
 		this.bob_profile.last_date = today
 		this.bob_liquid = bob_liquid
@@ -554,7 +954,7 @@ describe('Friends', function () {
 	it("Alice votes for changing the messaging attestors", async () => {
 		const timestamp = await this.timetravel('0d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
-		const balance = this.alice_profile.bytes_balance / ceiling_price + this.alice_profile.balance
+		const balance = this.alice_profile.balances.base / ceiling_price + this.alice_profile.balances.frd
 		const sqrt_balance = +Math.sqrt(balance).toPrecision(15)
 
 		const name = 'messaging_attestors'
@@ -577,20 +977,20 @@ describe('Friends', function () {
 		expect(response.bounced).to.be.false
 		expect(response.response_unit).to.be.null
 
+		this.aliceVotes.messaging_attestors = {
+				value,
+				sqrt_balance,
+			}
+
 		const { vars: friend_vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(friend_vars['variables']).to.be.undefined
 
 		const { vars } = await this.alice.readAAStateVars(this.governance_aa)
-		expect(vars['support_' + name + '_' + value]).to.eq(sqrt_balance)
+		expect(vars['support_' + name + '_' + value]).to.be.closeTo(sqrt_balance, 0.00001)
 		expect(vars['leader_' + name]).to.eq(value)
 		expect(vars['challenging_period_start_ts_' + name]).to.eq(response.timestamp)
 		expect(vars['choice_' + this.aliceAddress + '_' + name]).to.eq(value)
-		expect(vars['votes_' + this.aliceAddress]).deep.eq({
-			messaging_attestors: {
-				value,
-				sqrt_balance,
-			},
-		})
+		expect(vars['votes_' + this.aliceAddress]).to.deepCloseTo(this.aliceVotes, 0.00001)
 
 	})
 
@@ -719,8 +1119,10 @@ describe('Friends', function () {
 
 		this.total_locked += amount
 		this.carol_profile = {
-			balance: amount,
-			bytes_balance: 0,
+			balances: {
+				frd: amount,
+				base: 0,
+			},
 			unlock_date,
 			reg_ts: response.timestamp,
 			ref: this.bobAddress,
@@ -752,8 +1154,8 @@ describe('Friends', function () {
 		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((this.ts - this.launch_ts) / 365 / 24 / 3600)
 
-		const carol_balance = this.carol_profile.bytes_balance / ceiling_price + this.carol_profile.balance
-		const bob_balance = this.bob_profile.bytes_balance / ceiling_price + this.bob_profile.balance
+		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
 		const new_user_reward = Math.floor(Math.min(10e9, carol_balance, bob_balance))
 		const referral_reward = Math.floor(Math.min(10e9, carol_balance))
 		const carol_liquid = Math.floor(carol_balance *0.001)
@@ -816,10 +1218,10 @@ describe('Friends', function () {
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.carol_bob_friendship)
 		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
-		this.carol_profile.balance += carol_locked
+		this.carol_profile.balances.frd += carol_locked
 	//	this.carol_profile.new_user_rewards = new_user_reward
 		this.carol_profile.last_date = today
-		this.bob_profile.balance += bob_locked + referral_reward
+		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards = referral_reward
 		this.bob_profile.last_date = today
@@ -875,8 +1277,8 @@ describe('Friends', function () {
 		expect(response.bounced).to.be.false
 		expect(response.response_unit).to.be.validUnit
 
-		this.carol_profile.balance -= out_amount
-		this.carol_profile.bytes_balance += bytes_amount
+		this.carol_profile.balances.frd -= out_amount
+		this.carol_profile.balances.base += bytes_amount
 		this.total_locked -= out_amount
 		this.total_locked_bytes += bytes_amount
 		
@@ -900,7 +1302,7 @@ describe('Friends', function () {
 	it("Carol votes for changing the followup reward share", async () => {
 		const timestamp = await this.timetravel('0d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
-		const balance = this.carol_profile.bytes_balance / ceiling_price + this.carol_profile.balance
+		const balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
 		const sqrt_balance = +Math.sqrt(balance).toPrecision(15)
 
 		const name = 'followup_reward_share'
@@ -977,7 +1379,7 @@ describe('Friends', function () {
 	it("Carol votes for changing the rewards AA", async () => {
 		const timestamp = await this.timetravel('0d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
-		const balance = this.carol_profile.bytes_balance / ceiling_price + this.carol_profile.balance
+		const balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
 		const sqrt_balance = +Math.sqrt(balance).toPrecision(15)
 
 		const name = 'rewards_aa'
@@ -1057,8 +1459,11 @@ describe('Friends', function () {
 		const pair = this.carolAddress < this.aliceAddress ? this.carolAddress + '_' + this.aliceAddress : this.aliceAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const carol_balance = this.carol_profile.bytes_balance / ceiling_price + this.carol_profile.balance
-		const alice_balance = this.alice_profile.bytes_balance / ceiling_price + this.alice_profile.balance
+		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
+		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
+
+		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
+		const alice_balance = (this.alice_profile.balances.base + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes) / ceiling_price + this.alice_profile.balances.frd
 		const carol_liquid = Math.floor(carol_balance * 0.002)
 		const carol_locked = Math.floor(carol_balance * 0.02)
 		const alice_liquid = Math.floor(alice_balance * 0.002)
@@ -1117,9 +1522,9 @@ describe('Friends', function () {
 		const { vars: alice_vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(alice_vars['friendship_' + pair]).to.deep.eq(this.carol_alice_friendship)
 		const today = new Date(alice_response.timestamp * 1000).toISOString().substring(0, 10)
-		this.carol_profile.balance += carol_locked
+		this.carol_profile.balances.frd += carol_locked
 		this.carol_profile.last_date = today
-		this.alice_profile.balance += alice_locked
+		this.alice_profile.balances.frd += alice_locked
 		this.alice_profile.last_date = today
 		this.total_locked += carol_locked + alice_locked
 		this.alice_liquid += alice_liquid
@@ -1156,8 +1561,8 @@ describe('Friends', function () {
 		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const carol_balance = this.carol_profile.bytes_balance / ceiling_price + this.carol_profile.balance
-		const bob_balance = Math.min(this.bob_profile.bytes_balance / ceiling_price + this.bob_profile.balance, 200e9)
+		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
+		const bob_balance = Math.min(this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd, 200e9)
 		const carol_liquid = Math.floor(carol_balance * 0.002 * 0.1)
 		const carol_locked = Math.floor(carol_balance * 0.02 * 0.1)
 		const bob_liquid = Math.floor(bob_balance * 0.002 * 0.1)
@@ -1215,8 +1620,8 @@ describe('Friends', function () {
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.carol_bob_friendship)
 		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
-		this.carol_profile.balance += carol_locked
-		this.bob_profile.balance += bob_locked
+		this.carol_profile.balances.frd += carol_locked
+		this.bob_profile.balances.frd += bob_locked
 		this.total_locked += carol_locked + bob_locked
 		this.bob_liquid += bob_liquid
 		expect(bob_vars['user_' + this.carolAddress]).to.deep.eq(this.carol_profile)
@@ -1297,8 +1702,8 @@ describe('Friends', function () {
 		expect(response.bounced).to.be.false
 		expect(response.response_unit).to.be.validUnit
 
-		this.alice_profile.balance += amount
-		this.alice_profile.bytes_balance -= out_bytes_amount
+		this.alice_profile.balances.frd += amount
+		this.alice_profile.balances.base -= out_bytes_amount
 		this.total_locked += amount
 		this.total_locked_bytes -= out_bytes_amount
 
@@ -1318,6 +1723,109 @@ describe('Friends', function () {
 	})
 
 
+	it('Alice replaces some USDC with FRD', async () => {
+		const timestamp = await this.timetravel('10d')
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+		const amount = 10e6 // in FRD
+
+		const byte_exchange_rate_in_usdc = Math.min(this.recent.current.pmin, this.recent.prev.pmin) / 1.1
+
+		const out_usdc_amount = Math.floor(amount * ceiling_price * byte_exchange_rate_in_usdc)
+
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				[this.asset]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					replace: 1,
+					deposit_asset: this.usdc,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		this.alice_profile.balances.frd += amount
+		this.alice_profile.balances[this.usdc] -= out_usdc_amount
+		this.total_locked += amount
+
+		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
+		expect(vars['total_locked']).to.eq(this.total_locked)
+		expect(vars['total_locked_bytes']).to.eq(this.total_locked_bytes)
+
+		const { unitObj } = await this.alice.getUnitInfo({ unit: response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.usdc,
+				address: this.aliceAddress,
+				amount: out_usdc_amount,
+			},
+		])
+	})
+
+
+	it('Alice replaces some FRD with USDC', async () => {
+		const timestamp = await this.timetravel('10d')
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+		const amount = 100e4 // in USDC
+
+		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
+		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
+
+		const out_amount = Math.floor(amount / ceiling_price * usdc_exchange_rate_in_bytes)
+
+		const { unit, error } = await this.alice.sendMulti({
+			outputs_by_asset: {
+				[this.usdc]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					replace: 1,
+					deposit_asset: this.usdc,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		this.alice_profile.balances.frd -= out_amount
+		this.alice_profile.balances[this.usdc] += amount
+		this.total_locked -= out_amount
+
+		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
+		expect(vars['total_locked']).to.eq(this.total_locked)
+		expect(vars['total_locked_bytes']).to.eq(this.total_locked_bytes)
+
+		const { unitObj } = await this.alice.getUnitInfo({ unit: response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.aliceAddress,
+				amount: out_amount,
+			},
+		])
+	})
 
 
 	it('Carol tries to withdraw before unlock', async () => {
@@ -1362,11 +1870,11 @@ describe('Friends', function () {
 			{
 				asset: this.asset,
 				address: this.carolAddress,
-				amount: this.carol_profile.balance,
+				amount: this.carol_profile.balances.frd,
 			},
 			{
 				address: this.carolAddress,
-				amount: this.carol_profile.bytes_balance,
+				amount: this.carol_profile.balances.base,
 			},
 			{
 				address: this.governance_aa,
@@ -1374,10 +1882,10 @@ describe('Friends', function () {
 			},
 		])
 		
-		this.total_locked -= this.carol_profile.balance
-		this.total_locked_bytes -= this.carol_profile.bytes_balance
-		this.carol_profile.balance = 0
-		this.carol_profile.bytes_balance = 0
+		this.total_locked -= this.carol_profile.balances.frd
+		this.total_locked_bytes -= this.carol_profile.balances.base
+		this.carol_profile.balances.frd = 0
+		this.carol_profile.balances.base = 0
 		
 		const { vars } = await this.carol.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.carolAddress]).to.deep.eq(this.carol_profile)
