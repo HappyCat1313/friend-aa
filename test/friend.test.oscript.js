@@ -49,6 +49,10 @@ describe('Friends', function () {
 			.with.wallet({ alice: {base: 1000e9, usdc: 10000e4} })
 			.with.wallet({ bob: 1000e9 })
 			.with.wallet({ carol: 1000e9 })
+			.with.wallet({ dave: 1000e9 })
+			.with.wallet({ eve: 1000e9 })
+			.with.wallet({ fred: 1000e9 })
+			.with.wallet({ admin: 1e9 })
 			.with.wallet({ messagingAttestor: 1e9 })
 			.with.wallet({ realNameAttestor: 1e9 })
 		//	.with.explorer()
@@ -62,6 +66,18 @@ describe('Friends', function () {
 		
 		this.carol = this.network.wallet.carol
 		this.carolAddress = await this.carol.getAddress()
+		
+		this.dave = this.network.wallet.dave
+		this.daveAddress = await this.dave.getAddress()
+		
+		this.eve = this.network.wallet.eve
+		this.eveAddress = await this.eve.getAddress()
+		
+		this.fred = this.network.wallet.fred
+		this.fredAddress = await this.fred.getAddress()
+		
+		this.admin = this.network.wallet.admin
+		this.adminAddress = await this.admin.getAddress()
 		
 		this.messagingAttestor = this.network.wallet.messagingAttestor
 		this.messagingAttestorAddress = await this.messagingAttestor.getAddress()
@@ -110,6 +126,7 @@ describe('Friends', function () {
 		friend = friend.replace(/rewards_aa: '\w*'/, `rewards_aa: '${this.rewards_aa_address}'`)
 		friend = friend.replace(/messaging_attestors: '\w*'/, `messaging_attestors: '${this.messagingAttestorAddress}'`)
 		friend = friend.replace(/real_name_attestors: '\w*'/, `real_name_attestors: '${this.realNameAttestorAddress}'`)
+		friend = friend.replace(/ghost_admin = '\w*'/, `ghost_admin = '${this.adminAddress}'`)
 
 		const { address, error } = await this.alice.deployAgent(friend)
 		console.log(error)
@@ -277,10 +294,51 @@ describe('Friends', function () {
 			},
 			unlock_date,
 			reg_ts: response.timestamp,
+			current_ghost_num: 1,
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
+		expect(vars.total_locked).to.eq(0)
+		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
+	})
+
+
+	it('Admin defines a Satoshi ghost', async () => {
+		const ghost_name = 'Satoshi Nakamoto'
+		this.satoshi_name = ghost_name
+
+		const { unit, error } = await this.admin.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10_000,
+			data: {
+				add_ghost: 1,
+				ghost_name,
+			},
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.admin, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.null
+		expect(response.response.responseVars.message).to.eq("Added the new ghost account")
+
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
+		this.satoshi_profile = {
+			balances: {
+				frd: 100e9,
+			},
+			unlock_date: false,
+			reg_ts: response.timestamp,
+			ghost: true,
+			last_date: today,
+		}
+
+		const { vars } = await this.admin.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + ghost_name]).to.deep.eq(this.satoshi_profile)
 		expect(vars.total_locked).to.eq(0)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 	})
@@ -700,6 +758,7 @@ describe('Friends', function () {
 			},
 			unlock_date,
 			reg_ts: response.timestamp,
+			current_ghost_num: 1,
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -788,9 +847,13 @@ describe('Friends', function () {
 		this.alice_profile.balances.frd = alice_locked
 		this.alice_profile.new_user_rewards = new_user_reward
 		this.alice_profile.last_date = today
+		this.alice_profile.total_streak = 1
+		this.alice_profile.current_streak = 1
 		this.bob_profile.balances.frd = bob_locked
 		this.bob_profile.new_user_rewards = new_user_reward
 		this.bob_profile.last_date = today
+		this.bob_profile.total_streak = 1
+		this.bob_profile.current_streak = 1
 		this.bob_liquid = bob_liquid
 		this.total_locked = alice_locked + bob_locked
 		this.total_new_user_rewards = 2 * new_user_reward
@@ -1034,18 +1097,26 @@ describe('Friends', function () {
 	})
 
 
-	it('Bob sends some FRD to Carol', async () => {
-		const amount = Math.floor(this.bob_liquid / 2)
+	it('Bob sends some FRD to Carol, Dave, Eve, and Fred', async () => {
+		const amount = Math.floor(this.bob_liquid / 2 / 4)
 		const { unit, error } = await this.bob.sendMulti({
-			to_address: this.carolAddress,
-			amount,
-			asset: this.asset,
+			outputs_by_asset: {
+				[this.asset]: [
+					{ address: this.carolAddress, amount: amount },
+					{ address: this.daveAddress, amount: amount },
+					{ address: this.eveAddress, amount: amount },
+					{ address: this.fredAddress, amount: amount },
+				],
+			},
 		})
 		expect(error).to.be.null
 		expect(unit).to.be.validUnit
 
 		this.carol_liquid = amount
-		this.bob_liquid -= amount
+		this.dave_liquid = amount
+		this.eve_liquid = amount
+		this.fred_liquid = amount
+		this.bob_liquid -= 4 * amount
 	})
 
 
@@ -1075,6 +1146,114 @@ describe('Friends', function () {
 					address: this.carolAddress,
 					profile: {
 						user_id: 'cccccc',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest Dave for messaging, Bob is the attestor', async () => {
+		const { unit, error } = await this.bob.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.daveAddress,
+					profile: {
+						username: 'dave',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest the real name of Dave', async () => {
+		const { unit, error } = await this.realNameAttestor.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.daveAddress,
+					profile: {
+						user_id: 'ddddd',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest Eve for messaging, Bob is the attestor', async () => {
+		const { unit, error } = await this.bob.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.eveAddress,
+					profile: {
+						username: 'eve',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest the real name of Eve', async () => {
+		const { unit, error } = await this.realNameAttestor.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.eveAddress,
+					profile: {
+						user_id: 'eeee',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest Fred for messaging, messaging attestor is the attestor', async () => {
+		const { unit, error } = await this.messagingAttestor.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.fredAddress,
+					profile: {
+						username: 'fred',
+					},
+				}
+			}],
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+		await this.network.witnessUntilStable(unit)
+	})
+
+
+	it('Attest the real name of Fred', async () => {
+		const { unit, error } = await this.realNameAttestor.sendMulti({
+			messages: [{
+				app: 'attestation',
+				payload: {
+					address: this.fredAddress,
+					profile: {
+						user_id: 'fffff',
 					},
 				}
 			}],
@@ -1125,6 +1304,7 @@ describe('Friends', function () {
 			},
 			unlock_date,
 			reg_ts: response.timestamp,
+			current_ghost_num: 1,
 			ref: this.bobAddress,
 		}
 		this.ts = response.timestamp
@@ -1147,6 +1327,171 @@ describe('Friends', function () {
 			},
 		])
 
+	})
+
+
+	it('Dave deposits with Bob as referrer', async () => {
+		const term = 500
+		const amount = this.dave_liquid
+		console.log(`paying ${amount/1e9} FRD`)
+
+		const { unit, error } = await this.dave.sendMulti({
+			outputs_by_asset: {
+				[this.asset]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					deposit: 1,
+					term,
+					ref: this.bobAddress,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.dave, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+		expect(response.response.responseVars.message).to.eq("Deposited")
+		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
+
+		this.total_locked += amount
+		this.dave_profile = {
+			balances: {
+				frd: amount,
+				base: 0,
+			},
+			unlock_date,
+			reg_ts: response.timestamp,
+			current_ghost_num: 1,
+			ref: this.bobAddress,
+		}
+		this.ts = response.timestamp
+
+		const { vars } = await this.dave.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.daveAddress]).to.deep.eq(this.dave_profile)
+		expect(vars.total_locked).to.eq(this.total_locked)
+		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
+
+		const ref_deposit_reward = Math.floor(amount * 0.01)
+		this.bob_liquid += ref_deposit_reward
+
+		const { unitObj } = await this.dave.getUnitInfo({ unit: response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.bobAddress,
+				amount: ref_deposit_reward,
+			},
+		])
+	})
+
+
+	it('Eve deposits without a referrer', async () => {
+		const term = 500
+		const amount = this.eve_liquid
+		console.log(`paying ${amount/1e9} FRD`)
+
+		const { unit, error } = await this.eve.sendMulti({
+			outputs_by_asset: {
+				[this.asset]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					deposit: 1,
+					term,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.eve, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.null
+		expect(response.response.responseVars.message).to.eq("Deposited")
+		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
+
+		this.total_locked += amount
+		this.eve_profile = {
+			balances: {
+				frd: amount,
+				base: 0,
+			},
+			unlock_date,
+			reg_ts: response.timestamp,
+			current_ghost_num: 1,
+		}
+		this.ts = response.timestamp
+
+		const { vars } = await this.eve.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.eveAddress]).to.deep.eq(this.eve_profile)
+		expect(vars.total_locked).to.eq(this.total_locked)
+		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
+	})
+
+
+	it('Fred deposits without a referrer', async () => {
+		const term = 500
+		const amount = this.fred_liquid
+		console.log(`paying ${amount/1e9} FRD`)
+
+		const { unit, error } = await this.fred.sendMulti({
+			outputs_by_asset: {
+				[this.asset]: [{ address: this.friend_aa, amount: amount }],
+				base: [{ address: this.friend_aa, amount: 10_000 }],
+			},
+			messages: [{
+				app: 'data',
+				payload: {
+					deposit: 1,
+					term,
+				}
+			}],
+			spend_unconfirmed: 'all',
+		})
+		console.log({error, unit})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.fred, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.null
+		expect(response.response.responseVars.message).to.eq("Deposited")
+		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
+
+		this.total_locked += amount
+		this.fred_profile = {
+			balances: {
+				frd: amount,
+				base: 0,
+			},
+			unlock_date,
+			reg_ts: response.timestamp,
+			current_ghost_num: 1,
+		}
+		this.ts = response.timestamp
+
+		const { vars } = await this.fred.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.fredAddress]).to.deep.eq(this.fred_profile)
+		expect(vars.total_locked).to.eq(this.total_locked)
+		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 	})
 
 
@@ -1221,10 +1566,14 @@ describe('Friends', function () {
 		this.carol_profile.balances.frd += carol_locked
 	//	this.carol_profile.new_user_rewards = new_user_reward
 		this.carol_profile.last_date = today
+		this.carol_profile.total_streak = 1
+		this.carol_profile.current_streak = 1
 		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards = referral_reward
 		this.bob_profile.last_date = today
+	//	this.bob_profile.total_streak = 1
+	//	this.bob_profile.current_streak = 1
 		this.total_locked += carol_locked + bob_locked + referral_reward
 		this.total_new_user_rewards += 2 * new_user_reward
 		this.total_referral_rewards = 2 * referral_reward
@@ -1253,6 +1602,419 @@ describe('Friends', function () {
 			},
 		])
 
+	})
+
+
+	it('Dave and Bob become friends', async () => {		
+		const timestamp = await this.timetravel('1d')
+		const pair = this.daveAddress < this.bobAddress ? this.daveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.daveAddress
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+
+		const dave_balance = this.dave_profile.balances.base / ceiling_price + this.dave_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const new_user_reward = Math.floor(Math.min(10e9, dave_balance, bob_balance))
+		const referral_reward = Math.floor(Math.min(10e9, dave_balance))
+		const dave_liquid = Math.floor(dave_balance *0.001)
+		const dave_locked = Math.floor(dave_balance *0.01) + new_user_reward + referral_reward
+		const bob_liquid = Math.floor(bob_balance *0.001)
+		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
+		const dave_rewards = `liquid ${dave_liquid/1e9} FRD, locked ${dave_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, including referred user reward ${referral_reward/1e9} FRD`
+		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, plus referrer reward ${referral_reward/1e9} FRD`
+
+		// dave sends friend request
+		const { unit: dave_unit, error: dave_error } = await this.dave.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.bobAddress,
+			},
+		})
+		expect(dave_error).to.be.null
+		expect(dave_unit).to.be.validUnit
+
+		const { response: dave_response } = await this.network.getAaResponseToUnitOnNode(this.dave, dave_unit)
+		expect(dave_response.response.error).to.be.undefined
+		expect(dave_response.bounced).to.be.false
+		expect(dave_response.response_unit).to.be.null
+		expect(dave_response.response.responseVars.message).to.eq(`Registered your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: ${dave_rewards}.`)
+
+		this.dave_bob_friendship = {
+			followup_reward_share: 0.1,
+			initial: {
+				first: this.daveAddress,
+				ts: dave_response.timestamp,
+			}
+		}
+
+		const { vars: dave_vars } = await this.dave.readAAStateVars(this.friend_aa)
+		expect(dave_vars['friendship_' + pair]).to.deep.eq(this.dave_bob_friendship)
+
+		// bob sends friend request
+		const { unit: bob_unit, error: bob_error } = await this.bob.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.daveAddress,
+			},
+		})
+		expect(bob_error).to.be.null
+		expect(bob_unit).to.be.validUnit
+
+
+		const { response: bob_response } = await this.network.getAaResponseToUnitOnNode(this.bob, bob_unit)
+		expect(bob_response.response.error).to.be.undefined
+		expect(bob_response.bounced).to.be.false
+		expect(bob_response.response_unit).to.be.validUnit
+		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
+
+		this.dave_bob_friendship.initial.accept_ts = bob_response.timestamp
+
+		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
+		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.dave_bob_friendship)
+		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
+		this.dave_profile.balances.frd += dave_locked
+	//	this.dave_profile.new_user_rewards = new_user_reward
+		this.dave_profile.last_date = today
+		this.dave_profile.total_streak = 1
+		this.dave_profile.current_streak = 1
+		this.bob_profile.balances.frd += bob_locked + referral_reward
+		this.bob_profile.new_user_rewards += new_user_reward
+		this.bob_profile.referral_rewards += referral_reward
+		this.bob_profile.last_date = today
+		this.bob_profile.total_streak = 2
+		this.bob_profile.current_streak = 2
+		this.total_locked += dave_locked + bob_locked + referral_reward
+		this.total_new_user_rewards += 2 * new_user_reward
+		this.total_referral_rewards += 2 * referral_reward
+		this.bob_liquid += bob_liquid
+		expect(bob_vars['user_' + this.daveAddress]).to.deep.eq(this.dave_profile)
+		expect(bob_vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
+		
+		expect(bob_vars['friend_' + this.daveAddress + '_' + today]).to.be.eq(this.bobAddress)
+		expect(bob_vars['friend_' + this.bobAddress + '_' + today]).to.be.eq(this.daveAddress)
+		expect(bob_vars['total_new_user_rewards']).to.be.eq(this.total_new_user_rewards)
+		expect(bob_vars['total_referral_rewards']).to.be.eq(this.total_referral_rewards)
+		expect(bob_vars['total_locked']).to.eq(this.total_locked)
+
+		const { unitObj } = await this.bob.getUnitInfo({ unit: bob_response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.daveAddress,
+				amount: dave_liquid,
+			},
+			{
+				asset: this.asset,
+				address: this.bobAddress,
+				amount: bob_liquid,
+			},
+		])
+	})
+
+
+	it('Eve and Bob become friends', async () => {		
+		const timestamp = await this.timetravel('1d')
+		const pair = this.eveAddress < this.bobAddress ? this.eveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.eveAddress
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+
+		const eve_balance = this.eve_profile.balances.base / ceiling_price + this.eve_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const new_user_reward = Math.floor(Math.min(10e9, eve_balance, bob_balance))
+		const referral_reward = 0
+		const eve_liquid = Math.floor(eve_balance *0.001)
+		const eve_locked = Math.floor(eve_balance *0.01) + new_user_reward + referral_reward
+		const bob_liquid = Math.floor(bob_balance *0.001)
+		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
+		const eve_rewards = `liquid ${eve_liquid/1e9} FRD, locked ${eve_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+
+		// eve sends friend request
+		const { unit: eve_unit, error: eve_error } = await this.eve.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.bobAddress,
+			},
+		})
+		expect(eve_error).to.be.null
+		expect(eve_unit).to.be.validUnit
+
+		const { response: eve_response } = await this.network.getAaResponseToUnitOnNode(this.eve, eve_unit)
+		expect(eve_response.response.error).to.be.undefined
+		expect(eve_response.bounced).to.be.false
+		expect(eve_response.response_unit).to.be.null
+		expect(eve_response.response.responseVars.message).to.eq(`Registered your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: ${eve_rewards}.`)
+
+		this.eve_bob_friendship = {
+			followup_reward_share: 0.1,
+			initial: {
+				first: this.eveAddress,
+				ts: eve_response.timestamp,
+			}
+		}
+
+		const { vars: eve_vars } = await this.eve.readAAStateVars(this.friend_aa)
+		expect(eve_vars['friendship_' + pair]).to.deep.eq(this.eve_bob_friendship)
+
+		// bob sends friend request
+		const { unit: bob_unit, error: bob_error } = await this.bob.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.eveAddress,
+			},
+		})
+		expect(bob_error).to.be.null
+		expect(bob_unit).to.be.validUnit
+
+
+		const { response: bob_response } = await this.network.getAaResponseToUnitOnNode(this.bob, bob_unit)
+		expect(bob_response.response.error).to.be.undefined
+		expect(bob_response.bounced).to.be.false
+		expect(bob_response.response_unit).to.be.validUnit
+		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
+
+		this.eve_bob_friendship.initial.accept_ts = bob_response.timestamp
+
+		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
+		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.eve_bob_friendship)
+		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
+		this.eve_profile.balances.frd += eve_locked
+	//	this.eve_profile.new_user_rewards = new_user_reward
+		this.eve_profile.last_date = today
+		this.eve_profile.total_streak = 1
+		this.eve_profile.current_streak = 1
+		this.bob_profile.balances.frd += bob_locked + referral_reward
+		this.bob_profile.new_user_rewards += new_user_reward
+		this.bob_profile.referral_rewards += referral_reward
+		this.bob_profile.last_date = today
+		this.bob_profile.total_streak = 3
+		this.bob_profile.current_streak = 3
+		this.total_locked += eve_locked + bob_locked + referral_reward
+		this.total_new_user_rewards += 2 * new_user_reward
+		this.total_referral_rewards += 2 * referral_reward
+		this.bob_liquid += bob_liquid
+		expect(bob_vars['user_' + this.eveAddress]).to.deep.eq(this.eve_profile)
+		expect(bob_vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
+		
+		expect(bob_vars['friend_' + this.eveAddress + '_' + today]).to.be.eq(this.bobAddress)
+		expect(bob_vars['friend_' + this.bobAddress + '_' + today]).to.be.eq(this.eveAddress)
+		expect(bob_vars['total_new_user_rewards']).to.be.eq(this.total_new_user_rewards)
+		expect(bob_vars['total_referral_rewards']).to.be.eq(this.total_referral_rewards)
+		expect(bob_vars['total_locked']).to.eq(this.total_locked)
+
+		const { unitObj } = await this.bob.getUnitInfo({ unit: bob_response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.eveAddress,
+				amount: eve_liquid,
+			},
+			{
+				asset: this.asset,
+				address: this.bobAddress,
+				amount: bob_liquid,
+			},
+		])
+	})
+
+
+	it('Fred and Bob become friends', async () => {		
+		const timestamp = await this.timetravel('1d')
+		const pair = this.fredAddress < this.bobAddress ? this.fredAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.fredAddress
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+
+		const fred_balance = this.fred_profile.balances.base / ceiling_price + this.fred_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const new_user_reward = Math.floor(Math.min(10e9, fred_balance, bob_balance))
+		const referral_reward = 0
+		const fred_liquid = Math.floor(fred_balance *0.001)
+		const fred_locked = Math.floor(fred_balance *0.01) + new_user_reward + referral_reward
+		const bob_liquid = Math.floor(bob_balance *0.001)
+		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
+		const fred_rewards = `liquid ${fred_liquid/1e9} FRD, locked ${fred_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+
+		// fred sends friend request
+		const { unit: fred_unit, error: fred_error } = await this.fred.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.bobAddress,
+			},
+		})
+		expect(fred_error).to.be.null
+		expect(fred_unit).to.be.validUnit
+
+		const { response: fred_response } = await this.network.getAaResponseToUnitOnNode(this.fred, fred_unit)
+		expect(fred_response.response.error).to.be.undefined
+		expect(fred_response.bounced).to.be.false
+		expect(fred_response.response_unit).to.be.null
+		expect(fred_response.response.responseVars.message).to.eq(`Registered your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: ${fred_rewards}.`)
+
+		this.fred_bob_friendship = {
+			followup_reward_share: 0.1,
+			initial: {
+				first: this.fredAddress,
+				ts: fred_response.timestamp,
+			}
+		}
+
+		const { vars: fred_vars } = await this.fred.readAAStateVars(this.friend_aa)
+		expect(fred_vars['friendship_' + pair]).to.deep.eq(this.fred_bob_friendship)
+
+		// bob sends friend request
+		const { unit: bob_unit, error: bob_error } = await this.bob.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.fredAddress,
+			},
+		})
+		expect(bob_error).to.be.null
+		expect(bob_unit).to.be.validUnit
+
+
+		const { response: bob_response } = await this.network.getAaResponseToUnitOnNode(this.bob, bob_unit)
+		expect(bob_response.response.error).to.be.undefined
+		expect(bob_response.bounced).to.be.false
+		expect(bob_response.response_unit).to.be.validUnit
+		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
+
+		this.fred_bob_friendship.initial.accept_ts = bob_response.timestamp
+
+		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
+		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.fred_bob_friendship)
+		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
+		this.fred_profile.balances.frd += fred_locked
+	//	this.fred_profile.new_user_rewards = new_user_reward
+		this.fred_profile.last_date = today
+		this.fred_profile.total_streak = 1
+		this.fred_profile.current_streak = 1
+		this.bob_profile.balances.frd += bob_locked + referral_reward
+		this.bob_profile.new_user_rewards += new_user_reward
+		this.bob_profile.referral_rewards += referral_reward
+		this.bob_profile.last_date = today
+		this.bob_profile.total_streak = 4
+		this.bob_profile.current_streak = 4
+		this.total_locked += fred_locked + bob_locked + referral_reward
+		this.total_new_user_rewards += 2 * new_user_reward
+		this.total_referral_rewards += 2 * referral_reward
+		this.bob_liquid += bob_liquid
+		expect(bob_vars['user_' + this.fredAddress]).to.deep.eq(this.fred_profile)
+		expect(bob_vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
+		console.log(bob_vars['user_' + this.bobAddress])
+		
+		expect(bob_vars['friend_' + this.fredAddress + '_' + today]).to.be.eq(this.bobAddress)
+		expect(bob_vars['friend_' + this.bobAddress + '_' + today]).to.be.eq(this.fredAddress)
+		expect(bob_vars['total_new_user_rewards']).to.be.eq(this.total_new_user_rewards)
+		expect(bob_vars['total_referral_rewards']).to.be.eq(this.total_referral_rewards)
+		expect(bob_vars['total_locked']).to.eq(this.total_locked)
+
+		const { unitObj } = await this.bob.getUnitInfo({ unit: bob_response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.fredAddress,
+				amount: fred_liquid,
+			},
+			{
+				asset: this.asset,
+				address: this.bobAddress,
+				amount: bob_liquid,
+			},
+		])
+	})
+
+
+	it('Satoshi ghost and Bob become friends', async () => {		
+		const timestamp = await this.timetravel('1d')
+		const pair = this.satoshi_name + '_' + this.bobAddress
+		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+
+		const satoshi_balance = this.satoshi_profile.balances.frd
+		const bob_balance = Math.min(this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd, 200e9)
+		const new_user_reward = 0
+		const referral_reward = 0
+		const satoshi_locked = Math.floor(satoshi_balance * 0.01) + new_user_reward + referral_reward
+		const bob_liquid = Math.floor(bob_balance * 0.001)
+		const bob_locked = Math.floor(bob_balance * 0.01) + new_user_reward
+		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD`
+
+		// bob sends friend request
+		const { unit: bob_unit, error: bob_error } = await this.bob.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				connect: 1,
+				friend: this.satoshi_name,
+			},
+		})
+		expect(bob_error).to.be.null
+		expect(bob_unit).to.be.validUnit
+
+
+		const { response: bob_response } = await this.network.getAaResponseToUnitOnNode(this.bob, bob_unit)
+		expect(bob_response.response.error).to.be.undefined
+		expect(bob_response.bounced).to.be.false
+		expect(bob_response.response_unit).to.be.validUnit
+		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
+
+		this.satoshi_bob_friendship = {
+			followup_reward_share: 0.1,
+			initial: {
+				first: this.satoshi_name,
+				ts: bob_response.timestamp,
+				accept_ts: bob_response.timestamp,
+			}
+		}
+
+		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
+		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.satoshi_bob_friendship)
+		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
+		this.satoshi_profile.balances.frd += satoshi_locked
+	//	this.satoshi_profile.new_user_rewards = new_user_reward
+		this.satoshi_profile.last_date = today
+		this.satoshi_profile.total_streak = 1
+		this.satoshi_profile.current_streak = 1
+		this.bob_profile.balances.frd += bob_locked + referral_reward
+		this.bob_profile.new_user_rewards += new_user_reward
+		this.bob_profile.referral_rewards += referral_reward
+		this.bob_profile.last_date = today
+		this.bob_profile.total_streak = 5
+		this.bob_profile.current_streak = 0
+		this.bob_profile.current_ghost_num = 2
+		this.total_locked += bob_locked + referral_reward
+		this.total_new_user_rewards += 2 * new_user_reward
+		this.total_referral_rewards += 2 * referral_reward
+		this.bob_liquid += bob_liquid
+		expect(bob_vars['user_' + this.satoshi_name]).to.deep.eq(this.satoshi_profile)
+		expect(bob_vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
+		
+		expect(bob_vars['friend_' + this.satoshi_name + '_' + today]).to.be.eq(this.bobAddress)
+		expect(bob_vars['friend_' + this.bobAddress + '_' + today]).to.be.eq(this.satoshi_name)
+		expect(bob_vars['total_new_user_rewards']).to.be.eq(this.total_new_user_rewards)
+		expect(bob_vars['total_referral_rewards']).to.be.eq(this.total_referral_rewards)
+		expect(bob_vars['total_locked']).to.eq(this.total_locked)
+
+		const { unitObj } = await this.bob.getUnitInfo({ unit: bob_response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.bobAddress,
+				amount: bob_liquid,
+			},
+		])
 	})
 
 
@@ -1335,11 +2097,11 @@ describe('Friends', function () {
 			},
 		}
 		const { vars } = await this.carol.readAAStateVars(this.governance_aa)
-		expect(vars['support_' + name + '_' + value]).to.eq(sqrt_balance)
+		expect(vars['support_' + name + '_' + value]).to.be.closeTo(sqrt_balance, 0.00001)
 		expect(vars['leader_' + name]).to.eq(value)
 		expect(vars['challenging_period_start_ts_' + name]).to.eq(response.timestamp)
 		expect(vars['choice_' + this.carolAddress + '_' + name]).to.eq(value)
-		expect(vars['votes_' + this.carolAddress]).deep.eq(this.carolVotes)
+		expect(vars['votes_' + this.carolAddress]).deepCloseTo(this.carolVotes, 0.00001)
 
 	})
 
@@ -1417,7 +2179,7 @@ describe('Friends', function () {
 		expect(vars['leader_' + name]).to.eq(value)
 		expect(vars['challenging_period_start_ts_' + name]).to.eq(response.timestamp)
 		expect(vars['choice_' + this.carolAddress + '_' + name]).to.eq(value)
-		expect(vars['votes_' + this.carolAddress]).deep.eq(this.carolVotes)
+		expect(vars['votes_' + this.carolAddress]).deepCloseTo(this.carolVotes, 0.00001)
 
 	})
 
@@ -1484,6 +2246,7 @@ describe('Friends', function () {
 		expect(carol_unit).to.be.validUnit
 
 		const { response: carol_response } = await this.network.getAaResponseToUnitOnNode(this.carol, carol_unit)
+		if (carol_response.response.error) console.log(carol_response.response.error)
 		expect(carol_response.response.error).to.be.undefined
 		expect(carol_response.bounced).to.be.false
 		expect(carol_response.response_unit).to.be.null

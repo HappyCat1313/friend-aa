@@ -9,13 +9,15 @@
 
 		$year = 31536000; // 365 * 24 * 3600;
 
+		$ghost_admin = '3Y24IXW57546PQAPQ2SXYEPEDNX4KC6Y';
+
 
 		$get_deposited_supply = () => var['total_locked'];
 		
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'SY233BR7U2ANZ3OVFNE77HUFFRMUUWKN',
+				rewards_aa: 'BZ3AJ2ZFETX3TB3WLXRZICS7YDA6KDBU',
 				messaging_attestors: '',
 				real_name_attestors: '',
 				referrer_deposit_reward_share: 0.01,
@@ -177,6 +179,34 @@
 			},
 
 
+			// add a new ghost
+			{ 
+				if: `{
+					$ghost_name = trigger.data.ghost_name;
+					trigger.address == $ghost_admin AND trigger.data.add_ghost AND $ghost_name
+				}`,
+				init: `{
+					require(!is_valid_address($ghost_name), "ghost_name must not be a valid address");
+					require(!var['user_'||$ghost_name], "this ghost already exists");
+				}`,
+				messages: [
+					{
+						app: 'state',
+						state: `{
+							var['user_'||$ghost_name] = {
+								balances: {frd: 100e9}, // not included in total_locked
+								unlock_date: false,
+								reg_ts: timestamp,
+								ghost: true,
+								last_date: timestamp_to_string(timestamp, 'date'), // to make sure nobody gets new user rewards
+							};
+							response['message'] = "Added the new ghost account";
+						}`
+					}
+				]
+			},
+
+
 			// deposit
 			{
 				if: `{
@@ -192,7 +222,7 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp, current_ghost_num: 1};
 					$bNewUser = !$user.unlock_date;
 
 					$total_balance = $user.balances.frd + $received_amount + ($user.balances.base + $received_bytes_amount + ($deposit_asset ? ($user.balances[$deposit_asset] + $received_deposit_asset_amount) * $exchange_rates.min : 0))/$ceiling_price;
@@ -248,7 +278,7 @@
 							$user.balances.base = $user.balances.base + $received_bytes_amount;
 							if ($deposit_asset){
 								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount;
-								require(length($user.balances) <= 4, "maximum 4 deposit assets allowed, remove some old ones before adding new assets");
+								require(length($user.balances) <= 3, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
 							}
 							$user.unlock_date = $new_unlock_date;
 							var['user_'||trigger.address] = $user;
@@ -277,6 +307,7 @@
 				}`,
 				init: `{
 					$today = timestamp_to_string(timestamp, 'date');
+					$yesterday = timestamp_to_string(timestamp - 24 * 3600, 'date');
 					$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
 
 					$user1 = var['user_'||trigger.address];
@@ -286,21 +317,28 @@
 					require($friend != trigger.address, "you cannot become friends with yourself");
 					$user2 = var['user_'||$friend];
 					require($user2, "your friend must make a deposit first");
-					require($user2.unlock_date >= $min_unlock_date, "your friend's unlock date must be "||$min_unlock_date||" or later");
+					if ($user2.ghost){
+						$required_streak = ($user1.current_ghost_num + 1)^2;
+						require($user1.current_streak >= $required_streak, "you need a "||$required_streak||"-day streak to befriend the next ghost, your current streak length is only "||$user1.current_streak);
+					}
+					else
+						require($user2.unlock_date >= $min_unlock_date, "your friend's unlock date must be "||$min_unlock_date||" or later");
 
 					if (trigger.data.connect){
 						require(!$days, "don't send days for the initial connect");
 						require(!var['friend_'||trigger.address||'_'||$today], "you already made a friend today, try tomorrow");
-						require(!var['friend_'||$friend||'_'||$today], "your friend already made a friend today, try tomorrow");
-						$eligibility = $variables.rewards_aa#5.$are_eligible(trigger.address, $friend, $user1, $user2, $ceiling_price, $get_followup_reward_days());
-						require($eligibility.user1_eligible, "you are not eligible to make in-friends today");
-						require($eligibility.user2_eligible, "your friend is not eligible to make in-friends today");
+						if (!$user2.ghost){
+							require(!var['friend_'||$friend||'_'||$today], "your friend already made a friend today, try tomorrow");
+							$eligibility = $variables.rewards_aa#5.$are_eligible(trigger.address, $friend, $user1, $user2, $ceiling_price, $get_followup_reward_days());
+							require($eligibility.user1_eligible, "you are not eligible to make in-friends today");
+							require($eligibility.user2_eligible, "your friend is not eligible to make in-friends today");
+						}
 					}
 					else{
 						require($get_followup_reward_days()[$days], "no such follow-up");
 					}
 
-					$pair = trigger.address < $friend ? trigger.address||'_'||$friend : $friend||'_'||trigger.address;
+					$pair = trigger.address < $friend AND !$user2.ghost ? trigger.address||'_'||$friend : $friend||'_'||trigger.address;
 					$key = 'friendship_'||$pair;
 					$friendship = var[$key] OTHERWISE {followup_reward_share: $variables.followup_reward_share}; // the share is fixed for all future followups
 					if (!trigger.data.connect){ // followup
@@ -310,7 +348,7 @@
 						require($elapsed_days <= $days + $followup_claim_term, "too late");
 					}
 
-					$rewards = $variables.rewards_aa#26.$get_rewards(trigger.address, $friend, $user1, $user2, $ceiling_price, this_address, !trigger.data.connect);
+					$rewards = $variables.rewards_aa#20.$get_rewards(trigger.address, $friend, $user1, $user2, $ceiling_price, this_address, !trigger.data.connect);
 					if (!trigger.data.connect){ // followup, multiply all rewards by followup_reward_share
 						$rewards.user1.locked = floor($rewards.user1.locked * $friendship.followup_reward_share);
 						$rewards.user1.liquid = floor($rewards.user1.liquid * $friendship.followup_reward_share);
@@ -320,6 +358,8 @@
 					$rewards_description = $get_rewards_description($rewards, trigger.address);
 
 					$index = trigger.data.connect ? 'initial' : 'followup_'||$days;
+					if ($user2.ghost)
+						$friendship[$index] = {first: $friend, ts: timestamp};
 					if (!$friendship[$index]){
 						$friendship[$index] = {first: trigger.address, ts: timestamp};
 						response['message'] = "Registered your request. Your friend must send their request within 10 minutes, otherwise you both will have to start over. Expected rewards: "||$rewards_description||".";
@@ -342,6 +382,16 @@
 								$user1.balances.frd = $user1.balances.frd + $rewards.user1.locked;
 								$user2.balances.frd = $user2.balances.frd + $rewards.user2.locked;
 								if (trigger.data.connect){
+									$bContinueStreak1 = $user1.last_date AND $user1.last_date == $yesterday;
+									$bContinueStreak2 = $user2.last_date AND $user2.last_date == $yesterday;
+									$user1.total_streak = $bContinueStreak1 ? $user1.total_streak + 1 : 1;
+									$user2.total_streak = $bContinueStreak2 ? $user2.total_streak + 1 : 1;
+									$user1.current_streak = $bContinueStreak1 ? $user1.current_streak + 1 : 1;
+									$user2.current_streak = $bContinueStreak2 ? $user2.current_streak + 1 : 1;
+									if ($user2.ghost){
+										$user1.current_streak = 0; // reset the streak
+										$user1.current_ghost_num = $user1.current_ghost_num + 1;
+									}
 									$user1.last_date = $today;
 									$user2.last_date = $today;
 									if ($rewards.user1.is_new) // record a new user reward for the opposite user
@@ -351,7 +401,7 @@
 								}
 
 								response['message'] = (trigger.data.connect ? "Now you've become friends and you've received the following rewards: " : "You've received followup rewards: ") || $rewards_description || ".";
-								response['events'] = json_stringify({type: 'rewards', user1: trigger.address, user2: $friend, rewards: $rewards, followup: !trigger.data.connect, days: $days});
+								response['events'] = json_stringify({type: 'rewards', user1: trigger.address, user2: $friend, rewards: $rewards, followup: !trigger.data.connect, days: $days, ghost: $user2.ghost});
 							}
 						}
 					}
@@ -365,7 +415,7 @@
 							asset: `{$asset}`,
 							outputs: [
 								{address: "{trigger.address}", amount: "{$rewards.user1.liquid}"},
-								{address: "{$friend}", amount: "{$rewards.user2.liquid}"},
+								{address: "{$friend}", amount: "{$rewards.user2.liquid}", if: "{!$user2.ghost}"},
 							]
 						}
 					},
@@ -392,7 +442,7 @@
 									}
 								}
 								// users' locked rewards include the referred rewards but not the referrer rewards
-								var['total_locked'] += $rewards.user1.locked + $rewards.user2.locked + $referrer_totals.total;
+								var['total_locked'] += $rewards.user1.locked + ($user2.ghost ? 0 : $rewards.user2.locked) + $referrer_totals.total;
 							}
 							var[$key] = $friendship;
 						}`
@@ -528,7 +578,7 @@
 								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount - $out_amounts.deposit_asset;
 								if ($user.balances[$deposit_asset] == 0)
 									delete($user.balances, $deposit_asset);
-								require(length($user.balances) <= 4, "maximum 4 deposit assets allowed, remove some old ones before adding new assets");
+								require(length($user.balances) <= 3, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
 							}
 							var['user_'||trigger.address] = $user;
 						}`

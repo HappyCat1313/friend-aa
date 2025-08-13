@@ -51,8 +51,8 @@
 
 		$get_total_balance = ($balances, $ceiling_price, $friends_aa) => {
 			$totals = {in_bytes: $balances.base};
-			$asset_balances = filter($balances, 6, ($a, $balance) => $a != 'base' AND $a != 'frd');
-			foreach($asset_balances, 4, ($a, $balance) => {
+			$asset_balances = filter($balances, 5, ($a, $balance) => $a != 'base' AND $a != 'frd');
+			foreach($asset_balances, 3, ($a, $balance) => {
 				$totals.in_bytes = $totals.in_bytes + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a);
 			});
 			$balances.frd + $totals.in_bytes / $ceiling_price
