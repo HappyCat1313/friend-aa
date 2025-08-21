@@ -88,14 +88,14 @@
 				$capped_referral_reward1 = min($referral_reward, floor($total_balance1));
 				$rewards.user1.referred_user_reward = $capped_referral_reward1;
 				$rewards.user1.locked = $rewards.user1.locked + $capped_referral_reward1;
-				$rewards.user1.referrer = {address: $user1.ref, reward: $capped_referral_reward1};
+			//	$rewards.user1.referrer = {address: $user1.ref, reward: $capped_referral_reward1};
 				$rewards.referrers[$user1.ref] = $capped_referral_reward1;
 			}
 			if (!$user2.last_date AND $user2.ref){
 				$capped_referral_reward2 = min($referral_reward, floor($total_balance2));
 				$rewards.user2.referred_user_reward = $capped_referral_reward2;
 				$rewards.user2.locked = $rewards.user2.locked + $capped_referral_reward2;
-				$rewards.user2.referrer = {address: $user2.ref, reward: $capped_referral_reward2};
+			//	$rewards.user2.referrer = {address: $user2.ref, reward: $capped_referral_reward2};
 				$rewards.referrers[$user2.ref] = $capped_referral_reward2 + $rewards.referrers[$user2.ref]; // might be the same referrer for both users
 			}
 
