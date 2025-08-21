@@ -381,6 +381,10 @@
 								$friendship[$index].accept_ts = timestamp;
 								$user1.balances.frd = $user1.balances.frd + $rewards.user1.locked;
 								$user2.balances.frd = $user2.balances.frd + $rewards.user2.locked;
+								$user1.locked_rewards = $user1.locked_rewards + $rewards.user1.locked;
+								$user2.locked_rewards = $user2.locked_rewards + $rewards.user2.locked;
+								$user1.liquid_rewards = $user1.liquid_rewards + $rewards.user1.liquid;
+								$user2.liquid_rewards = $user2.liquid_rewards + $rewards.user2.liquid;
 								if (trigger.data.connect){
 									$bContinueStreak1 = $user1.last_date AND $user1.last_date == $yesterday;
 									$bContinueStreak2 = $user2.last_date AND $user2.last_date == $yesterday;
@@ -435,6 +439,7 @@
 											$user = var['user_'||$addr]; // it can be one of the connecting users whose var has already been updated
 											$user.balances.frd = $user.balances.frd + $reward;
 											$user.referral_rewards = $user.referral_rewards + $reward;
+											$user.locked_rewards = $user.locked_rewards + $reward;
 											var['user_'||$addr] = $user;
 											$referrer_totals.total = $referrer_totals.total + $reward;
 										});
