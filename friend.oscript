@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 177214 */
+		/* nonce: 742297 */
 
 		$matching_timeout = 600;
 
@@ -18,8 +18,8 @@
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
 				rewards_aa: 'HNGCRINZM3ACW7M4JP5WLCZXPRXIF5MK',
-				messaging_attestors: '',
-				real_name_attestors: '',
+				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
+				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_deposit_reward_share: 0.01,
 				followup_reward_share: 0.1,
 				min_balance_instead_of_real_name: 500e9,

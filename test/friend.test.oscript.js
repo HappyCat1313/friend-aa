@@ -124,8 +124,8 @@ describe('Friends', function () {
 	it('Deploy Friend AA', async () => {
 		let friend = fs.readFileSync(path.join(__dirname, '../friend.oscript'), 'utf8');
 		friend = friend.replace(/rewards_aa: '\w*'/, `rewards_aa: '${this.rewards_aa_address}'`)
-		friend = friend.replace(/messaging_attestors: '\w*'/, `messaging_attestors: '${this.messagingAttestorAddress}'`)
-		friend = friend.replace(/real_name_attestors: '\w*'/, `real_name_attestors: '${this.realNameAttestorAddress}'`)
+		friend = friend.replace(/messaging_attestors: '[\w:]*'/, `messaging_attestors: '${this.messagingAttestorAddress}'`)
+		friend = friend.replace(/real_name_attestors: '[\w:]*'/, `real_name_attestors: '${this.realNameAttestorAddress}'`)
 		friend = friend.replace(/ghost_admin = '\w*'/, `ghost_admin = '${this.adminAddress}'`)
 
 		const { address, error } = await this.alice.deployAgent(friend)
