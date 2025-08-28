@@ -3,8 +3,13 @@
 
 		$locked_reward_share = 0.02;
 		$liquid_reward_share = 0.002;
+
+		$deposit_asset_reducer = 0.5;
+		$bytes_reducer = 0.75;
+
 		$new_user_reward = 10e9;
 		$referral_reward = 10e9;
+
 		$balance_cap = 200e9;
 
 
@@ -45,14 +50,14 @@
 			$pmax = max($recent.current.pmax, $recent.prev.pmax);
 			$pmin = min($recent.current.pmin, $recent.prev.pmin);
 			require($pmin > 0 AND $pmax > 0, "pmin and pmax must be > 0");
-			($bX ? $pmin : 1/$pmax) * 0.9
+			$bX ? $pmin : 1/$pmax
 		};
 
 		$get_total_balance = ($balances, $ceiling_price, $friends_aa) => {
-			$totals = {in_bytes: $balances.base};
+			$totals = {in_bytes: $balances.base * $bytes_reducer};
 			$asset_balances = filter($balances, 5, ($a, $balance) => $a != 'base' AND $a != 'frd');
 			foreach($asset_balances, 3, ($a, $balance) => {
-				$totals.in_bytes = $totals.in_bytes + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a);
+				$totals.in_bytes = $totals.in_bytes + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a) * $deposit_asset_reducer;
 			});
 			$balances.frd + $totals.in_bytes / $ceiling_price
 		};

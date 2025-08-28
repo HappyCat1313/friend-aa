@@ -117,6 +117,8 @@ describe('Friends', function () {
 			return await this.executeGetter(this.pool_aa, 'get_price', [asset_label, 0, 0, bAfterInterest])
 		}
 
+		this.deposit_asset_reducer = 0.5
+		this.bytes_reducer = 0.75
 
 	})
 
@@ -775,10 +777,10 @@ describe('Friends', function () {
 		const pair = this.aliceAddress < this.bobAddress ? this.aliceAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.aliceAddress
 
 		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
-		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
+		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc
 
-		const alice_balance = (this.alice_profile.balances.base + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes) / ceiling_price
-		const bob_balance = this.bob_profile.balances.base / ceiling_price
+		const alice_balance = (this.alice_profile.balances.base * this.bytes_reducer + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes * this.deposit_asset_reducer) / ceiling_price
+		const bob_balance = this.bob_profile.balances.base * this.bytes_reducer / ceiling_price
 		const new_user_reward = Math.floor(Math.min(10e9, alice_balance, bob_balance))
 		const alice_liquid = Math.floor(alice_balance * 0.001)
 		const alice_locked = Math.floor(alice_balance * 0.01) + new_user_reward
@@ -1503,8 +1505,8 @@ describe('Friends', function () {
 		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((this.ts - this.launch_ts) / 365 / 24 / 3600)
 
-		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
-		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const carol_balance = this.carol_profile.balances.base * this.bytes_reducer / ceiling_price + this.carol_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd
 		const new_user_reward = Math.floor(Math.min(10e9, carol_balance, bob_balance))
 		const referral_reward = Math.floor(Math.min(10e9, carol_balance))
 		const carol_liquid = Math.floor(carol_balance *0.001)
@@ -1618,8 +1620,8 @@ describe('Friends', function () {
 		const pair = this.daveAddress < this.bobAddress ? this.daveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.daveAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const dave_balance = this.dave_profile.balances.base / ceiling_price + this.dave_profile.balances.frd
-		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const dave_balance = this.dave_profile.balances.base * this.bytes_reducer / ceiling_price + this.dave_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd
 		const new_user_reward = Math.floor(Math.min(10e9, dave_balance, bob_balance))
 		const referral_reward = Math.floor(Math.min(10e9, dave_balance))
 		const dave_liquid = Math.floor(dave_balance *0.001)
@@ -1732,8 +1734,8 @@ describe('Friends', function () {
 		const pair = this.eveAddress < this.bobAddress ? this.eveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.eveAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const eve_balance = this.eve_profile.balances.base / ceiling_price + this.eve_profile.balances.frd
-		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const eve_balance = this.eve_profile.balances.base * this.bytes_reducer / ceiling_price + this.eve_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd
 		const new_user_reward = Math.floor(Math.min(10e9, eve_balance, bob_balance))
 		const referral_reward = 0
 		const eve_liquid = Math.floor(eve_balance *0.001)
@@ -1846,8 +1848,8 @@ describe('Friends', function () {
 		const pair = this.fredAddress < this.bobAddress ? this.fredAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.fredAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const fred_balance = this.fred_profile.balances.base / ceiling_price + this.fred_profile.balances.frd
-		const bob_balance = this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd
+		const fred_balance = this.fred_profile.balances.base * this.bytes_reducer / ceiling_price + this.fred_profile.balances.frd
+		const bob_balance = this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd
 		const new_user_reward = Math.floor(Math.min(10e9, fred_balance, bob_balance))
 		const referral_reward = 0
 		const fred_liquid = Math.floor(fred_balance *0.001)
@@ -1962,7 +1964,7 @@ describe('Friends', function () {
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const satoshi_balance = this.satoshi_profile.balances.frd
-		const bob_balance = Math.min(this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd, 200e9)
+		const bob_balance = Math.min(this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd, 200e9)
 		const new_user_reward = 0
 		const referral_reward = 0
 		const satoshi_liquid = Math.floor(satoshi_balance * 0.001)
@@ -2247,10 +2249,10 @@ describe('Friends', function () {
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
-		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
+		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc
 
-		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
-		const alice_balance = (this.alice_profile.balances.base + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes) / ceiling_price + this.alice_profile.balances.frd
+		const carol_balance = this.carol_profile.balances.base * this.bytes_reducer / ceiling_price + this.carol_profile.balances.frd
+		const alice_balance = (this.alice_profile.balances.base * this.bytes_reducer + this.alice_profile.balances[this.usdc] * usdc_exchange_rate_in_bytes * this.deposit_asset_reducer) / ceiling_price + this.alice_profile.balances.frd
 		const carol_liquid = Math.floor(carol_balance * 0.002)
 		const carol_locked = Math.floor(carol_balance * 0.02)
 		const alice_liquid = Math.floor(alice_balance * 0.002)
@@ -2353,8 +2355,8 @@ describe('Friends', function () {
 		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const carol_balance = this.carol_profile.balances.base / ceiling_price + this.carol_profile.balances.frd
-		const bob_balance = Math.min(this.bob_profile.balances.base / ceiling_price + this.bob_profile.balances.frd, 200e9)
+		const carol_balance = this.carol_profile.balances.base * this.bytes_reducer / ceiling_price + this.carol_profile.balances.frd
+		const bob_balance = Math.min(this.bob_profile.balances.base * this.bytes_reducer / ceiling_price + this.bob_profile.balances.frd, 200e9)
 		const carol_liquid = Math.floor(carol_balance * 0.002 * 0.1)
 		const carol_locked = Math.floor(carol_balance * 0.02 * 0.1)
 		const bob_liquid = Math.floor(bob_balance * 0.002 * 0.1)

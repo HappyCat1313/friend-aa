@@ -17,7 +17,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'HNGCRINZM3ACW7M4JP5WLCZXPRXIF5MK',
+				rewards_aa: '2MGLFS3QKUKSUUVMXQUI6LGHRV3HL62J',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_deposit_reward_share: 0.01,
