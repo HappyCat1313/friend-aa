@@ -774,7 +774,8 @@ describe('Friends', function () {
 		const timestamp = await this.timetravel('0d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
-		const pair = this.aliceAddress < this.bobAddress ? this.aliceAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.aliceAddress
+		const isAB = this.aliceAddress < this.bobAddress
+		const pair = isAB ? this.aliceAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.aliceAddress
 
 		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
 		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc
@@ -788,6 +789,22 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance * 0.01) + new_user_reward
 		const alice_rewards = `liquid ${alice_liquid/1e9} FRD, locked ${alice_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+		const aliceRewards = {
+			locked: alice_locked,
+			liquid: alice_liquid,
+			new_user_reward,
+			is_new: true,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+			new_user_reward,
+			is_new: true,
+		}
+		const rewards = {
+			a: isAB ? aliceRewards : bobRewards,
+			b: isAB ? bobRewards : aliceRewards,
+		}
 
 		// alice sends friend request
 		const { unit: alice_unit, error: alice_error } = await this.alice.triggerAaWithData({
@@ -840,9 +857,10 @@ describe('Friends', function () {
 		expect(bob_vars['friendship_' + pair]).to.deep.eq({
 			followup_reward_share: 0.1,
 			initial: {
-				first: this.aliceAddress,
-				ts: alice_response.timestamp,
+			//	first: this.aliceAddress,
+			//	ts: alice_response.timestamp,
 				accept_ts: bob_response.timestamp,
+				rewards,
 			}
 		})
 		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)
@@ -1502,7 +1520,8 @@ describe('Friends', function () {
 
 
 	it('Carol and Bob become friends', async () => {		
-		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
+		const isAB = this.carolAddress < this.bobAddress
+		const pair = isAB ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((this.ts - this.launch_ts) / 365 / 24 / 3600)
 
 		const carol_balance = this.carol_profile.balances.base * this.bytes_reducer / ceiling_price + this.carol_profile.balances.frd
@@ -1515,6 +1534,25 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
 		const carol_rewards = `liquid ${carol_liquid/1e9} FRD, locked ${carol_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, including referred user reward ${referral_reward/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, plus referrer reward ${referral_reward/1e9} FRD`
+		const carolRewards = {
+			locked: carol_locked,
+			liquid: carol_liquid,
+			new_user_reward,
+			referred_user_reward: referral_reward,
+			is_new: true,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+			new_user_reward,
+		}
+		const rewards = {
+			a: isAB ? carolRewards : bobRewards,
+			b: isAB ? bobRewards : carolRewards,
+			referrers: {
+				[this.bobAddress]: referral_reward,
+			}
+		}
 
 		// carol sends friend request
 		const { unit: carol_unit, error: carol_error } = await this.carol.triggerAaWithData({
@@ -1565,6 +1603,9 @@ describe('Friends', function () {
 		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
 
 		this.carol_bob_friendship.initial.accept_ts = bob_response.timestamp
+		this.carol_bob_friendship.initial.rewards = rewards
+		delete this.carol_bob_friendship.initial.ts
+		delete this.carol_bob_friendship.initial.first
 
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.carol_bob_friendship)
@@ -1617,7 +1658,8 @@ describe('Friends', function () {
 
 	it('Dave and Bob become friends', async () => {		
 		const timestamp = await this.timetravel('1d')
-		const pair = this.daveAddress < this.bobAddress ? this.daveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.daveAddress
+		const isAB = this.daveAddress < this.bobAddress
+		const pair = isAB ? this.daveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.daveAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const dave_balance = this.dave_profile.balances.base * this.bytes_reducer / ceiling_price + this.dave_profile.balances.frd
@@ -1630,6 +1672,25 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
 		const dave_rewards = `liquid ${dave_liquid/1e9} FRD, locked ${dave_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, including referred user reward ${referral_reward/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD, plus referrer reward ${referral_reward/1e9} FRD`
+		const daveRewards = {
+			locked: dave_locked,
+			liquid: dave_liquid,
+			new_user_reward,
+			referred_user_reward: referral_reward,
+			is_new: true,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+			new_user_reward,
+		}
+		const rewards = {
+			a: isAB ? daveRewards : bobRewards,
+			b: isAB ? bobRewards : daveRewards,
+			referrers: {
+				[this.bobAddress]: referral_reward,
+			}
+		}
 
 		// dave sends friend request
 		const { unit: dave_unit, error: dave_error } = await this.dave.triggerAaWithData({
@@ -1680,6 +1741,9 @@ describe('Friends', function () {
 		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
 
 		this.dave_bob_friendship.initial.accept_ts = bob_response.timestamp
+		this.dave_bob_friendship.initial.rewards = rewards
+		delete this.dave_bob_friendship.initial.ts
+		delete this.dave_bob_friendship.initial.first
 
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.dave_bob_friendship)
@@ -1731,7 +1795,8 @@ describe('Friends', function () {
 
 	it('Eve and Bob become friends', async () => {		
 		const timestamp = await this.timetravel('1d')
-		const pair = this.eveAddress < this.bobAddress ? this.eveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.eveAddress
+		const isAB = this.eveAddress < this.bobAddress
+		const pair = isAB ? this.eveAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.eveAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const eve_balance = this.eve_profile.balances.base * this.bytes_reducer / ceiling_price + this.eve_profile.balances.frd
@@ -1744,6 +1809,21 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
 		const eve_rewards = `liquid ${eve_liquid/1e9} FRD, locked ${eve_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+		const eveRewards = {
+			locked: eve_locked,
+			liquid: eve_liquid,
+			new_user_reward,
+			is_new: true,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+			new_user_reward,
+		}
+		const rewards = {
+			a: isAB ? eveRewards : bobRewards,
+			b: isAB ? bobRewards : eveRewards,
+		}
 
 		// eve sends friend request
 		const { unit: eve_unit, error: eve_error } = await this.eve.triggerAaWithData({
@@ -1794,6 +1874,9 @@ describe('Friends', function () {
 		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
 
 		this.eve_bob_friendship.initial.accept_ts = bob_response.timestamp
+		this.eve_bob_friendship.initial.rewards = rewards
+		delete this.eve_bob_friendship.initial.ts
+		delete this.eve_bob_friendship.initial.first
 
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.eve_bob_friendship)
@@ -1845,7 +1928,8 @@ describe('Friends', function () {
 
 	it('Fred and Bob become friends', async () => {		
 		const timestamp = await this.timetravel('1d')
-		const pair = this.fredAddress < this.bobAddress ? this.fredAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.fredAddress
+		const isAB = this.fredAddress < this.bobAddress
+		const pair = isAB ? this.fredAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.fredAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const fred_balance = this.fred_profile.balances.base * this.bytes_reducer / ceiling_price + this.fred_profile.balances.frd
@@ -1858,6 +1942,21 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance *0.01) + new_user_reward
 		const fred_rewards = `liquid ${fred_liquid/1e9} FRD, locked ${fred_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD, including new user reward ${new_user_reward/1e9} FRD`
+		const fredRewards = {
+			locked: fred_locked,
+			liquid: fred_liquid,
+			new_user_reward,
+			is_new: true,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+			new_user_reward,
+		}
+		const rewards = {
+			a: isAB ? fredRewards : bobRewards,
+			b: isAB ? bobRewards : fredRewards,
+		}
 
 		// fred sends friend request
 		const { unit: fred_unit, error: fred_error } = await this.fred.triggerAaWithData({
@@ -1908,6 +2007,9 @@ describe('Friends', function () {
 		expect(bob_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${bob_rewards}.`)
 
 		this.fred_bob_friendship.initial.accept_ts = bob_response.timestamp
+		this.fred_bob_friendship.initial.rewards = rewards
+		delete this.fred_bob_friendship.initial.ts
+		delete this.fred_bob_friendship.initial.first
 
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.fred_bob_friendship)
@@ -1972,6 +2074,18 @@ describe('Friends', function () {
 		const bob_liquid = Math.floor(bob_balance * 0.001)
 		const bob_locked = Math.floor(bob_balance * 0.01) + new_user_reward
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD`
+		const satoshiRewards = {
+			locked: satoshi_locked,
+			liquid: satoshi_liquid,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+		}
+		const rewards = {
+			a: satoshiRewards,
+			b: bobRewards,
+		}
 
 		// bob sends friend request
 		const { unit: bob_unit, error: bob_error } = await this.bob.triggerAaWithData({
@@ -1995,9 +2109,10 @@ describe('Friends', function () {
 		this.satoshi_bob_friendship = {
 			followup_reward_share: 0.1,
 			initial: {
-				first: this.satoshi_name,
-				ts: bob_response.timestamp,
+			//	first: this.satoshi_name,
+			//	ts: bob_response.timestamp,
 				accept_ts: bob_response.timestamp,
+				rewards,
 			}
 		}
 
@@ -2245,7 +2360,8 @@ describe('Friends', function () {
 
 	it('Carol and Alice become friends', async () => {
 		const timestamp = await this.timetravel('1d')
-		const pair = this.carolAddress < this.aliceAddress ? this.carolAddress + '_' + this.aliceAddress : this.aliceAddress + '_' + this.carolAddress
+		const isAB = this.carolAddress < this.aliceAddress
+		const pair = isAB ? this.carolAddress + '_' + this.aliceAddress : this.aliceAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
@@ -2259,6 +2375,18 @@ describe('Friends', function () {
 		const alice_locked = Math.floor(alice_balance * 0.02)
 		const carol_rewards = `liquid ${carol_liquid/1e9} FRD, locked ${carol_locked/1e9} FRD`
 		const alice_rewards = `liquid ${alice_liquid/1e9} FRD, locked ${alice_locked/1e9} FRD`
+		const carolRewards = {
+			locked: carol_locked,
+			liquid: carol_liquid,
+		}
+		const aliceRewards = {
+			locked: alice_locked,
+			liquid: alice_liquid,
+		}
+		const rewards = {
+			a: isAB ? carolRewards : aliceRewards,
+			b: isAB ? aliceRewards : carolRewards,
+		}
 
 		// carol sends friend request
 		const { unit: carol_unit, error: carol_error } = await this.carol.triggerAaWithData({
@@ -2309,6 +2437,10 @@ describe('Friends', function () {
 		expect(alice_response.response.responseVars.message).to.eq(`Now you've become friends and you've received the following rewards: ${alice_rewards}.`)
 
 		this.carol_alice_friendship.initial.accept_ts = alice_response.timestamp;
+		this.carol_alice_friendship.initial.rewards = rewards
+		delete this.carol_alice_friendship.initial.ts
+		delete this.carol_alice_friendship.initial.first
+
 		const { vars: alice_vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(alice_vars['friendship_' + pair]).to.deep.eq(this.carol_alice_friendship)
 		const today = new Date(alice_response.timestamp * 1000).toISOString().substring(0, 10)
@@ -2352,7 +2484,8 @@ describe('Friends', function () {
 
 	it('Carol and Bob claim followup reward', async () => {
 		const timestamp = await this.timetravel('55d')
-		const pair = this.carolAddress < this.bobAddress ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
+		const isAB = this.carolAddress < this.bobAddress
+		const pair = isAB ? this.carolAddress + '_' + this.bobAddress : this.bobAddress + '_' + this.carolAddress
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 
 		const carol_balance = this.carol_profile.balances.base * this.bytes_reducer / ceiling_price + this.carol_profile.balances.frd
@@ -2363,6 +2496,18 @@ describe('Friends', function () {
 		const bob_locked = Math.floor(bob_balance * 0.02 * 0.1)
 		const carol_rewards = `liquid ${carol_liquid/1e9} FRD, locked ${carol_locked/1e9} FRD`
 		const bob_rewards = `liquid ${bob_liquid/1e9} FRD, locked ${bob_locked/1e9} FRD`
+		const carolRewards = {
+			locked: carol_locked,
+			liquid: carol_liquid,
+		}
+		const bobRewards = {
+			locked: bob_locked,
+			liquid: bob_liquid,
+		}
+		const rewards = {
+			a: isAB ? carolRewards : bobRewards,
+			b: isAB ? bobRewards : carolRewards,
+		}
 
 		// carol sends followup request
 		const { unit: carol_unit, error: carol_error } = await this.carol.triggerAaWithData({
@@ -2411,6 +2556,10 @@ describe('Friends', function () {
 		expect(bob_response.response.responseVars.message).to.eq(`You've received followup rewards: ${bob_rewards}.`)
 
 		this.carol_bob_friendship.followup_60.accept_ts = bob_response.timestamp
+		this.carol_bob_friendship.followup_60.rewards = rewards
+		delete this.carol_bob_friendship.followup_60.ts
+		delete this.carol_bob_friendship.followup_60.first
+
 		const { vars: bob_vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(bob_vars['friendship_' + pair]).to.deep.eq(this.carol_bob_friendship)
 		const today = new Date(bob_response.timestamp * 1000).toISOString().substring(0, 10)

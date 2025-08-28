@@ -17,7 +17,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: '2MGLFS3QKUKSUUVMXQUI6LGHRV3HL62J',
+				rewards_aa: 'TQNNRLADHTUPTJ7KEWCYS5XRSILFEKBG',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_deposit_reward_share: 0.01,
@@ -338,7 +338,8 @@
 						require($get_followup_reward_days()[$days], "no such follow-up");
 					}
 
-					$pair = trigger.address < $friend AND !$user2.ghost ? trigger.address||'_'||$friend : $friend||'_'||trigger.address;
+					$isAB = trigger.address < $friend AND !$user2.ghost; // alphabetically sorted, or the ghost comes first
+					$pair = $isAB ? trigger.address||'_'||$friend : $friend||'_'||trigger.address;
 					$key = 'friendship_'||$pair;
 					$friendship = var[$key] OTHERWISE {followup_reward_share: $variables.followup_reward_share}; // the share is fixed for all future followups
 					if (!trigger.data.connect){ // followup
@@ -448,6 +449,15 @@
 								}
 								// users' locked rewards include the referred rewards but not the referrer rewards
 								var['total_locked'] += $rewards.user1.locked + ($user2.ghost ? 0 : $rewards.user2.locked) + $referrer_totals.total;
+
+								// replace user1 and user2 with alphabetically sorted a and b
+								$rewards.a = $isAB ? $rewards.user1 : $rewards.user2;
+								$rewards.b = $isAB ? $rewards.user2 : $rewards.user1;
+								delete($rewards, 'user1');
+								delete($rewards, 'user2');
+								$friendship[$index].rewards = $rewards;
+								delete($friendship[$index], 'first'); // save storage space to make sure we don't exceed 1024 bytes
+								delete($friendship[$index], 'ts');
 							}
 							var[$key] = $friendship;
 						}`

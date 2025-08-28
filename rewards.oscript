@@ -73,14 +73,17 @@
 				user1: {
 					locked: floor($capped_total_balance1 * $locked_reward_share),
 					liquid: floor($capped_total_balance1 * $liquid_reward_share),
-					is_new: !$user1.last_date,
 				},
 				user2: {
 					locked: floor($capped_total_balance2 * $locked_reward_share),
 					liquid: floor($capped_total_balance2 * $liquid_reward_share),
-					is_new: !$user2.last_date,
 				},
 			};
+
+			if (!$user1.last_date)
+				$rewards.user1.is_new = true;
+			if (!$user2.last_date)
+				$rewards.user2.is_new = true;
 
 			if ($bNewUser){
 				$capped_new_user_reward = floor(min($new_user_reward, $total_balance1, $total_balance2));
