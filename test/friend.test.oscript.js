@@ -119,7 +119,7 @@ describe('Friends', function () {
 
 		this.deposit_asset_reducer = 0.5
 		this.bytes_reducer = 0.75
-
+		this.min_balance_instead_of_real_name = 50e9
 	})
 
 
@@ -222,7 +222,7 @@ describe('Friends', function () {
 		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
 		expect(response.bounced).to.be.true
 		expect(response.response_unit).to.be.validUnit
-		expect(response.response.error).to.eq("your address must be real-name attested or you should deposit at least 500 FRD")
+		expect(response.response.error).to.eq(`your address must be real-name attested or you should deposit at least ${this.min_balance_instead_of_real_name / 1e9} FRD`)
 	})
 
 
@@ -729,8 +729,8 @@ describe('Friends', function () {
 	})
 
 
-	it('Bob deposits 505 GB without real-name attestation', async () => {
-		const amount = 505e9
+	it('Bob deposits 50.5 GB without real-name attestation', async () => {
+		const amount = 50.5e9
 		console.log(`paying ${amount/1e9} GB`)
 
 		const { unit, error } = await this.bob.triggerAaWithData({
@@ -1113,7 +1113,7 @@ describe('Friends', function () {
 			real_name_attestors: this.realNameAttestorAddress,
 			referrer_deposit_reward_share: 0.01,
 			followup_reward_share: 0.1,
-			min_balance_instead_of_real_name: 500e9,
+			min_balance_instead_of_real_name: this.min_balance_instead_of_real_name,
 		}
 		const { vars: friend_vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(friend_vars.variables).to.deep.eq(this.variables)
@@ -2317,11 +2317,11 @@ describe('Friends', function () {
 		expect(this.carolVotes.rewards_aa.sqrt_balance).to.be.lt(this.carolVotes.followup_reward_share.sqrt_balance) // because the ceiling price has grown in 4 days and the locked Bytes became less valuable in terms of FRD
 
 		const { vars } = await this.carol.readAAStateVars(this.governance_aa)
-		expect(vars['support_' + name + '_' + value]).to.eq(sqrt_balance)
+		expect(vars['support_' + name + '_' + value]).to.be.closeTo(sqrt_balance, 0.000000001)
 		expect(vars['leader_' + name]).to.eq(value)
 		expect(vars['challenging_period_start_ts_' + name]).to.eq(response.timestamp)
 		expect(vars['choice_' + this.carolAddress + '_' + name]).to.eq(value)
-		expect(vars['votes_' + this.carolAddress]).deepCloseTo(this.carolVotes, 0.00001)
+		expect(vars['votes_' + this.carolAddress]).deepCloseTo(this.carolVotes, 0.000000001)
 
 	})
 

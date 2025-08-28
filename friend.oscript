@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 742297 */
+		/* nonce: 645324 */
 
 		$matching_timeout = 600;
 
@@ -22,7 +22,7 @@
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_deposit_reward_share: 0.01,
 				followup_reward_share: 0.1,
-				min_balance_instead_of_real_name: 500e9,
+				min_balance_instead_of_real_name: 50e9,
 			}
 		};
 
