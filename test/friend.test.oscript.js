@@ -1111,7 +1111,9 @@ describe('Friends', function () {
 			rewards_aa: this.rewards_aa_address,
 			messaging_attestors: value,
 			real_name_attestors: this.realNameAttestorAddress,
-			referrer_deposit_reward_share: 0.01,
+			referrer_frd_deposit_reward_share: 0.02,
+			referrer_bytes_deposit_reward_share: 0.01,
+			referrer_deposit_asset_deposit_reward_share: 0.01,
 			followup_reward_share: 0.1,
 			min_balance_instead_of_real_name: this.min_balance_instead_of_real_name,
 		}
@@ -1338,7 +1340,7 @@ describe('Friends', function () {
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 
-		const ref_deposit_reward = Math.floor(amount * 0.01)
+		const ref_deposit_reward = Math.floor(amount * 0.02)
 		this.bob_liquid += ref_deposit_reward
 
 		const { unitObj } = await this.carol.getUnitInfo({ unit: response.response_unit })
@@ -1404,7 +1406,7 @@ describe('Friends', function () {
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 
-		const ref_deposit_reward = Math.floor(amount * 0.01)
+		const ref_deposit_reward = Math.floor(amount * 0.02)
 		this.bob_liquid += ref_deposit_reward
 
 		const { unitObj } = await this.dave.getUnitInfo({ unit: response.response_unit })

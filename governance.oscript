@@ -12,12 +12,14 @@
 			'rewards_aa',
 			'messaging_attestors',
 			'real_name_attestors',
-			'referrer_deposit_reward_share',
+			'referrer_frd_deposit_reward_share',
+			'referrer_bytes_deposit_reward_share',
+			'referrer_deposit_asset_deposit_reward_share',
 			'followup_reward_share',
 			'min_balance_instead_of_real_name',
 			'deposit_asset',
 		];
-		$count_names = 7;
+		$count_names = 9;
 		require(length($names) == $count_names, "wrong number of governable parameters");
 		
 		$is_allowed_name = $name => {
