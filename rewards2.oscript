@@ -12,6 +12,8 @@
 
 		$balance_cap = 200e9;
 
+		$year = 31536000; // 365 * 24 * 3600;
+
 
 		$get_period = ($days_old, $fu_addition_days) => {
 			$res = {period: 1};
@@ -62,7 +64,7 @@
 			$balances.frd + $totals.in_bytes / $ceiling_price
 		};
 
-		$get_rewards = ($address1, $address2, $user1, $user2, $ceiling_price, $friends_aa, $bFollowup) => {
+		$get_rewards = ($address1, $address2, $user1, $user2, $user1_ref, $user2_ref, $ceiling_price, $friends_aa, $bFollowup) => {
 			$total_balance1 = $get_total_balance($user1.balances, $ceiling_price, $friends_aa);
 			$total_balance2 = $get_total_balance($user2.balances, $ceiling_price, $friends_aa);
 			$bNewUser = !$user1.last_date OR !$user2.last_date;
@@ -92,14 +94,15 @@
 				$rewards.user2.new_user_reward = $capped_new_user_reward;
 			}
 
-			if (!$user1.last_date AND $user1.ref){
+			$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
+			if (!$user1.last_date AND $user1.ref AND $user1_ref.unlock_date >= $min_unlock_date){
 				$capped_referral_reward1 = min($referral_reward, floor($total_balance1));
 				$rewards.user1.referred_user_reward = $capped_referral_reward1;
 				$rewards.user1.locked = $rewards.user1.locked + $capped_referral_reward1;
 			//	$rewards.user1.referrer = {address: $user1.ref, reward: $capped_referral_reward1};
 				$rewards.referrers[$user1.ref] = $capped_referral_reward1;
 			}
-			if (!$user2.last_date AND $user2.ref){
+			if (!$user2.last_date AND $user2.ref AND $user2_ref.unlock_date >= $min_unlock_date){
 				$capped_referral_reward2 = min($referral_reward, floor($total_balance2));
 				$rewards.user2.referred_user_reward = $capped_referral_reward2;
 				$rewards.user2.locked = $rewards.user2.locked + $capped_referral_reward2;
