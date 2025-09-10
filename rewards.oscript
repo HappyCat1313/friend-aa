@@ -12,6 +12,9 @@
 
 		$balance_cap = 200e9;
 
+		$in_friend_price = 2e9; // FRD to be burned to allow in-friends that are otherwise not allowed
+
+
 		$year = 31536000; // 365 * 24 * 3600;
 
 
@@ -24,19 +27,19 @@
 			$res.period
 		};
 
-		$is_eligible_for_infriends = ($address, $user, $ceiling_price, $followup_reward_days) => {
+		$is_eligible_for_infriends = ($address, $user, $ceiling_price, $followup_reward_days, $received_amount) => {
 			$days_old = floor((timestamp - $user.reg_ts)/24/3600);
 			$fu_addition_days = keys($followup_reward_days);
 			$period = $get_period($days_old, $fu_addition_days);
-			$days_old % $period == 0
+			$days_old % $period == 0 OR $in_friend_price AND $received_amount >= $in_friend_price
 		};
 
 		// either one of the users is new or both are allowed to make in-friends today
-		$are_eligible = ($address1, $address2, $user1, $user2, $ceiling_price, $followup_reward_days) => {
+		$are_eligible = ($address1, $address2, $user1, $user2, $ceiling_price, $followup_reward_days, $received_amount) => {
 			$bNewUser = !$user1.last_date OR !$user2.last_date;
 			{
-				user1_eligible: $bNewUser OR $is_eligible_for_infriends($address1, $user1, $ceiling_price, $followup_reward_days),
-				user2_eligible: $bNewUser OR $is_eligible_for_infriends($address2, $user2, $ceiling_price, $followup_reward_days),
+				user1_eligible: $bNewUser OR $is_eligible_for_infriends($address1, $user1, $ceiling_price, $followup_reward_days, $received_amount),
+				user2_eligible: $bNewUser OR $is_eligible_for_infriends($address2, $user2, $ceiling_price, $followup_reward_days, $in_friend_price), // if in_friend_price > 0, user2 is always eligible (they won't complete friendship if he is actually not eligible and doesn't want to pay)
 			}
 		};
 

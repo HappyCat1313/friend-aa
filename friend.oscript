@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 2303979 */
+		/* nonce: 70540 */
 
 		$matching_timeout = 600;
 
@@ -18,7 +18,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'TPQDBFOLVCMD6J6FYXDRQ4X4FFJ2G4BK',
+				rewards_aa: '3YUY2YC2BWXTQB2AMMFFCTAKSBAFSNXO',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_frd_deposit_reward_share: 0.02,
@@ -44,8 +44,8 @@
 			2^((timestamp - $constants.launch_ts)/$year)
 		};
 
-		$is_eligible_for_infriends = ($address) => {
-			$get_variables().rewards_aa#5.$is_eligible_for_infriends($address, var['user_'||$address], $get_ceiling_price(), $get_followup_reward_days())
+		$is_eligible_for_infriends = ($address, $received_amount) => {
+			$get_variables().rewards_aa#5.$is_eligible_for_infriends($address, var['user_'||$address], $get_ceiling_price(), $get_followup_reward_days(), $received_amount OTHERWISE 0)
 		};
 
 		$get_rewards_description = ($rewards, $address) => {
@@ -335,7 +335,7 @@
 						require(!var['friend_'||trigger.address||'_'||$today], "you already made a friend today, try tomorrow");
 						if (!$user2.ghost){
 							require(!var['friend_'||$friend||'_'||$today], "your friend already made a friend today, try tomorrow");
-							$eligibility = $variables.rewards_aa#5.$are_eligible(trigger.address, $friend, $user1, $user2, $ceiling_price, $get_followup_reward_days());
+							$eligibility = $variables.rewards_aa#5.$are_eligible(trigger.address, $friend, $user1, $user2, $ceiling_price, $get_followup_reward_days(), $received_amount);
 							require($eligibility.user1_eligible, "you are not eligible to make in-friends today");
 							require($eligibility.user2_eligible, "your friend is not eligible to make in-friends today");
 						}
