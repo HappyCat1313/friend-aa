@@ -13,6 +13,7 @@
 		$balance_cap = 200e9;
 
 		$in_friend_price = 2e9; // FRD to be burned to allow in-friends that are otherwise not allowed
+		$min_deposit_today_for_infriends = 10e9; // FRD to be deposited today to allow in-friends that are otherwise not allowed
 
 
 		$year = 31536000; // 365 * 24 * 3600;
@@ -31,7 +32,9 @@
 			$days_old = floor((timestamp - $user.reg_ts)/24/3600);
 			$fu_addition_days = keys($followup_reward_days);
 			$period = $get_period($days_old, $fu_addition_days);
-			$days_old % $period == 0 OR $in_friend_price AND $received_amount >= $in_friend_price
+			$days_old % $period == 0
+				OR $in_friend_price AND $received_amount >= $in_friend_price
+				OR $user.last_deposit_date == timestamp_to_string(timestamp, 'date') AND $user.last_day_deposits >= $min_deposit_today_for_infriends
 		};
 
 		// either one of the users is new or both are allowed to make in-friends today

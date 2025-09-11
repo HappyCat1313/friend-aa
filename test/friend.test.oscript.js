@@ -286,6 +286,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + 365 * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked_bytes = amount
@@ -297,6 +298,8 @@ describe('Friends', function () {
 			unlock_date,
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
+			last_day_frd_deposits: 0,
+			last_deposit_date: today,
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -697,10 +700,12 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + 365 * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.alice_profile.balances[this.usdc] = amount
 		this.alice_profile.unlock_date = unlock_date
+		this.alice_profile.last_deposit_date = today
 		this.ts = response.timestamp
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -750,6 +755,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + 365 * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked_bytes += amount
@@ -761,6 +767,8 @@ describe('Friends', function () {
 			unlock_date,
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
+			last_day_frd_deposits: 0,
+			last_deposit_date: today,
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -975,9 +983,11 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.be.undefined
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.alice_profile.unlock_date = unlock_date
+		this.alice_profile.last_deposit_date = today
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
@@ -1007,9 +1017,11 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.be.undefined
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.bob_profile.unlock_date = unlock_date
+		this.bob_profile.last_deposit_date = today
 
 		const { vars } = await this.bob.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
@@ -1320,6 +1332,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.validUnit
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked += amount
@@ -1332,6 +1345,8 @@ describe('Friends', function () {
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
 			ref: this.bobAddress,
+			last_day_frd_deposits: amount,
+			last_deposit_date: today,
 		}
 		this.ts = response.timestamp
 
@@ -1386,6 +1401,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.validUnit
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked += amount
@@ -1398,6 +1414,8 @@ describe('Friends', function () {
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
 			ref: this.bobAddress,
+			last_day_frd_deposits: amount,
+			last_deposit_date: today,
 		}
 		this.ts = response.timestamp
 
@@ -1450,6 +1468,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked += amount
@@ -1461,6 +1480,8 @@ describe('Friends', function () {
 			unlock_date,
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
+			last_day_frd_deposits: amount,
+			last_deposit_date: today,
 		}
 		this.ts = response.timestamp
 
@@ -1500,6 +1521,7 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 		expect(response.response.responseVars.message).to.eq("Deposited")
 		const unlock_date = new Date((response.timestamp + term * 24 * 3600) * 1000).toISOString().substring(0, 10)
+		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
 		this.total_locked += amount
@@ -1511,6 +1533,8 @@ describe('Friends', function () {
 			unlock_date,
 			reg_ts: response.timestamp,
 			current_ghost_num: 1,
+			last_day_frd_deposits: amount,
+			last_deposit_date: today,
 		}
 		this.ts = response.timestamp
 

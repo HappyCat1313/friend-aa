@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 70540 */
+		/* nonce: 434570 */
 
 		$matching_timeout = 600;
 
@@ -18,7 +18,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: '3YUY2YC2BWXTQB2AMMFFCTAKSBAFSNXO',
+				rewards_aa: 'Y3XS3ZHW2BLFXWZGXLPZ2LII7UWEMHSS',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_frd_deposit_reward_share: 0.02,
@@ -97,6 +97,7 @@
 		$ceiling_price = 2^((timestamp - $constants.launch_ts)/$year);
 
 		$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
+		$today = timestamp_to_string(timestamp, 'date');
 
 
 		if ($asset)
@@ -227,7 +228,7 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp, current_ghost_num: 1};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp, current_ghost_num: 1, last_deposit_date: ''};
 					$bNewUser = !$user.unlock_date;
 
 					// total_balance is without reducers
@@ -287,6 +288,11 @@
 								require(length($user.balances) <= 3, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
 							}
 							$user.unlock_date = $new_unlock_date;
+							if ($user.last_deposit_date != $today){
+								$user.last_deposit_date = $today;
+								$user.last_day_frd_deposits = 0;
+							}
+							$user.last_day_frd_deposits = $user.last_day_frd_deposits + $received_amount;
 							var['user_'||trigger.address] = $user;
 							if ($bNewUser AND $user_id)
 								var['rn_address_'||$user_id] = trigger.address;
@@ -313,9 +319,6 @@
 					($bConnect OR trigger.data.followup AND $days) AND $friend
 				}`,
 				init: `{
-					$today = timestamp_to_string(timestamp, 'date');
-					$yesterday = timestamp_to_string(timestamp - 86400, 'date');
-
 					$user1 = var['user_'||trigger.address];
 					require($user1, "please make a deposit first");
 					require($user1.unlock_date >= $min_unlock_date, "your unlock date must be "||$min_unlock_date||" or later");
@@ -392,6 +395,7 @@
 								$user1.liquid_rewards = $user1.liquid_rewards + $rewards.user1.liquid;
 								$user2.liquid_rewards = $user2.liquid_rewards + $rewards.user2.liquid;
 								if ($bConnect){
+									$yesterday = timestamp_to_string(timestamp - 86400, 'date');
 									$bContinueStreak1 = $user1.last_date AND $user1.last_date == $yesterday;
 									$bContinueStreak2 = $user2.last_date AND $user2.last_date == $yesterday;
 									$user1.total_streak = $bContinueStreak1 ? $user1.total_streak + 1 : 1;
