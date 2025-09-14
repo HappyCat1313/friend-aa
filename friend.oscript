@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 434570 */
+		/* nonce: 507532 */
 
 		$matching_timeout = 600;
 
@@ -18,7 +18,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'Y3XS3ZHW2BLFXWZGXLPZ2LII7UWEMHSS',
+				rewards_aa: 'U5XOW44U7ATAI6DMGBPRBFMOLV2C34GY',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_frd_deposit_reward_share: 0.02,
@@ -202,7 +202,7 @@
 							var['user_'||$ghost_name] = {
 								balances: {frd: 100e9}, // not included in total_locked
 								unlock_date: false,
-								reg_ts: timestamp,
+								reg_date: $today,
 								ghost: true,
 								last_date: timestamp_to_string(timestamp, 'date'), // to make sure nobody gets new user rewards
 							};
@@ -228,7 +228,7 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_ts: timestamp, current_ghost_num: 1, last_deposit_date: ''};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_date: $today, current_ghost_num: 1, last_deposit_date: ''};
 					$bNewUser = !$user.unlock_date;
 
 					// total_balance is without reducers

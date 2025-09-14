@@ -29,7 +29,7 @@
 		};
 
 		$is_eligible_for_infriends = ($address, $user, $ceiling_price, $followup_reward_days, $received_amount) => {
-			$days_old = floor((timestamp - $user.reg_ts)/24/3600);
+			$days_old = floor((timestamp - parse_date($user.reg_date))/24/3600);
 			$fu_addition_days = keys($followup_reward_days);
 			$period = $get_period($days_old, $fu_addition_days);
 			$days_old % $period == 0
