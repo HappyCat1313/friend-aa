@@ -75,8 +75,9 @@
 			$total_balance1 = $get_total_balance($user1.balances, $ceiling_price, $friends_aa);
 			$total_balance2 = $get_total_balance($user2.balances, $ceiling_price, $friends_aa);
 			$bNewUser = !$user1.last_date OR !$user2.last_date;
-			$capped_total_balance1 = $bNewUser ? $total_balance1 : min($total_balance1, $balance_cap);
-			$capped_total_balance2 = $bNewUser ? $total_balance2 : min($total_balance2, $balance_cap);
+			$bNewUserOrFromNewUser = $bNewUser OR $bFollowup AND ($user1.first_friend == $address2 OR $user2.first_friend == $address1);
+			$capped_total_balance1 = $bNewUserOrFromNewUser ? $total_balance1 : min($total_balance1, $balance_cap);
+			$capped_total_balance2 = $bNewUserOrFromNewUser ? $total_balance2 : min($total_balance2, $balance_cap);
 			$rewards = {
 				user1: {
 					locked: floor($capped_total_balance1 * $locked_reward_share),

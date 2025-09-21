@@ -300,6 +300,7 @@ describe('Friends', function () {
 			current_ghost_num: 1,
 			last_day_frd_deposits: 0,
 			last_deposit_date: today,
+			last_date: '',
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -340,6 +341,7 @@ describe('Friends', function () {
 			reg_date: today,
 			ghost: true,
 			last_date: today,
+			first_friend: '',
 		}
 
 		const { vars } = await this.admin.readAAStateVars(this.friend_aa)
@@ -769,6 +771,7 @@ describe('Friends', function () {
 			current_ghost_num: 1,
 			last_day_frd_deposits: 0,
 			last_deposit_date: today,
+			last_date: '',
 		}
 
 		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
@@ -879,6 +882,7 @@ describe('Friends', function () {
 		this.alice_profile.last_date = today
 		this.alice_profile.total_streak = 1
 		this.alice_profile.current_streak = 1
+		this.alice_profile.first_friend = this.bobAddress
 		this.bob_profile.balances.frd = bob_locked
 		this.bob_profile.new_user_rewards = new_user_reward
 		this.bob_profile.locked_rewards = bob_locked
@@ -886,6 +890,7 @@ describe('Friends', function () {
 		this.bob_profile.last_date = today
 		this.bob_profile.total_streak = 1
 		this.bob_profile.current_streak = 1
+		this.bob_profile.first_friend = this.aliceAddress
 		this.bob_liquid = bob_liquid
 		this.total_locked = alice_locked + bob_locked
 		this.total_new_user_rewards = 2 * new_user_reward
@@ -1347,6 +1352,7 @@ describe('Friends', function () {
 			ref: this.bobAddress,
 			last_day_frd_deposits: amount,
 			last_deposit_date: today,
+			last_date: '',
 		}
 		this.ts = response.timestamp
 
@@ -1416,6 +1422,7 @@ describe('Friends', function () {
 			ref: this.bobAddress,
 			last_day_frd_deposits: amount,
 			last_deposit_date: today,
+			last_date: '',
 		}
 		this.ts = response.timestamp
 
@@ -1482,6 +1489,7 @@ describe('Friends', function () {
 			current_ghost_num: 1,
 			last_day_frd_deposits: amount,
 			last_deposit_date: today,
+			last_date: '',
 		}
 		this.ts = response.timestamp
 
@@ -1535,6 +1543,7 @@ describe('Friends', function () {
 			current_ghost_num: 1,
 			last_day_frd_deposits: amount,
 			last_deposit_date: today,
+			last_date: '',
 		}
 		this.ts = response.timestamp
 
@@ -1643,6 +1652,7 @@ describe('Friends', function () {
 		this.carol_profile.last_date = today
 		this.carol_profile.total_streak = 1
 		this.carol_profile.current_streak = 1
+		this.carol_profile.first_friend = this.bobAddress
 		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards = referral_reward
@@ -1781,6 +1791,7 @@ describe('Friends', function () {
 		this.dave_profile.last_date = today
 		this.dave_profile.total_streak = 1
 		this.dave_profile.current_streak = 1
+		this.dave_profile.first_friend = this.bobAddress
 		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards += referral_reward
@@ -1914,6 +1925,7 @@ describe('Friends', function () {
 		this.eve_profile.last_date = today
 		this.eve_profile.total_streak = 1
 		this.eve_profile.current_streak = 1
+		this.eve_profile.first_friend = this.bobAddress
 		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards += referral_reward
@@ -2047,6 +2059,7 @@ describe('Friends', function () {
 		this.fred_profile.last_date = today
 		this.fred_profile.total_streak = 1
 		this.fred_profile.current_streak = 1
+		this.fred_profile.first_friend = this.bobAddress
 		this.bob_profile.balances.frd += bob_locked + referral_reward
 		this.bob_profile.new_user_rewards += new_user_reward
 		this.bob_profile.referral_rewards += referral_reward

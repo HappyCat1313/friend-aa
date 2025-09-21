@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 507532 */
+		/* nonce: 788154 */
 
 		$matching_timeout = 600;
 
@@ -18,7 +18,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'U5XOW44U7ATAI6DMGBPRBFMOLV2C34GY',
+				rewards_aa: 'AQ7D2DWJI6PQTEOD575IXJHL7OMWJS52',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_frd_deposit_reward_share: 0.02,
@@ -205,6 +205,7 @@
 								reg_date: $today,
 								ghost: true,
 								last_date: timestamp_to_string(timestamp, 'date'), // to make sure nobody gets new user rewards
+								first_friend: '',
 							};
 							response['message'] = "Added the new ghost account";
 						}`
@@ -228,7 +229,7 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_date: $today, current_ghost_num: 1, last_deposit_date: ''};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_date: $today, current_ghost_num: 1, last_deposit_date: '', last_date: ''};
 					$bNewUser = !$user.unlock_date;
 
 					// total_balance is without reducers
@@ -396,8 +397,8 @@
 								$user2.liquid_rewards = $user2.liquid_rewards + $rewards.user2.liquid;
 								if ($bConnect){
 									$yesterday = timestamp_to_string(timestamp - 86400, 'date');
-									$bContinueStreak1 = $user1.last_date AND $user1.last_date == $yesterday;
-									$bContinueStreak2 = $user2.last_date AND $user2.last_date == $yesterday;
+									$bContinueStreak1 = $user1.last_date == $yesterday;
+									$bContinueStreak2 = $user2.last_date == $yesterday;
 									$user1.total_streak = $bContinueStreak1 ? $user1.total_streak + 1 : 1;
 									$user2.total_streak = $bContinueStreak2 ? $user2.total_streak + 1 : 1;
 									$user1.current_streak = $bContinueStreak1 ? $user1.current_streak + 1 : 1;
@@ -408,10 +409,16 @@
 									}
 									$user1.last_date = $today;
 									$user2.last_date = $today;
-									if ($rewards.user1.is_new) // record a new user reward for the opposite user
+									if ($rewards.user1.is_new){
+										$user1.first_friend = $friend;
+										// record a new user reward for the opposite user
 										$user2.new_user_rewards = $user2.new_user_rewards + $rewards.user2.new_user_reward;
-									if ($rewards.user2.is_new) // record a new user reward for the opposite user
+									}
+									if ($rewards.user2.is_new){
+										$user2.first_friend = trigger.address;
+										// record a new user reward for the opposite user
 										$user1.new_user_rewards = $user1.new_user_rewards + $rewards.user1.new_user_reward;
+									}
 								}
 
 								response['message'] = ($bConnect ? "Now you've become friends and you've received the following rewards: " : "You've received followup rewards: ") || $rewards_description;
