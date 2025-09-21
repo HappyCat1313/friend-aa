@@ -415,7 +415,7 @@
 								}
 
 								response['message'] = ($bConnect ? "Now you've become friends and you've received the following rewards: " : "You've received followup rewards: ") || $rewards_description;
-								response['events'] = json_stringify({type: 'rewards', user1: trigger.address, user2: $friend, rewards: $rewards, followup: !$bConnect, days: $days, ghost: $user2.ghost});
+								response['event'] = json_stringify({type: 'rewards', user1: trigger.address, user2: $friend, rewards: $rewards, followup: !$bConnect, days: $days, ghost: $user2.ghost});
 							}
 						}
 					}
