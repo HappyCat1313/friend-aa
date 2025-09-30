@@ -80,8 +80,10 @@
 						name: $name,
 						value: $leader,
 					};
-					if ($name == 'deposit_asset')
+					if ($name == 'deposit_asset'){
+						require($leader != 'no', "only oswap AA can be committed");
 						$payload.deposit_asset = $deposit_asset;
+					}
 				}`,
 				messages: [
 					// ping the friend_aa to record the new value
@@ -128,10 +130,16 @@
 					if (exists($value)){
 						if ($name == 'rewards_aa' OR $name == 'messaging_attestors' OR $name == 'real_name_attestors' OR $name == 'deposit_asset'){
 							require(typeof($value) == 'string', "must be a string");
-							if ($name == 'rewards_aa' OR $name == 'deposit_asset'){
+							if ($name == 'rewards_aa')
 								require(is_aa($value), "not an AA");
-								if ($name == 'deposit_asset') // just check that it doesn't throw
+							else if ($name == 'deposit_asset'){
+								if ($value == 'no') // vote 'no' to oppose addition of the asset
+									require(!var[$full_name], "this asset is already added, you can't vote 'no' anymore");
+								else{
+									require(is_aa($value), "not an AA");
+									// just check that it doesn't throw
 									$friend_aa#2.$get_deposit_asset_exchange_rates_on_aa($deposit_asset, $value);
+								}
 							}
 							else{
 								$arr = split($value, ':');

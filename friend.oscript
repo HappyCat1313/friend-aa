@@ -109,7 +109,7 @@
 			$exchange_rates = $get_deposit_asset_exchange_rates($deposit_asset);
 		}
 
-		$governance_base_aa = 'QGC7DUUYI2RY3MFS3LBXI2LSRLCK7ACW';
+		$governance_base_aa = 'POVOHVO7QKPWXW5XK7ZCV3622XXT2WHI';
 
 	}`,
 	messages: {
@@ -172,7 +172,7 @@
 						app: 'state',
 						state: `{
 							if ($name == 'deposit_asset')
-								var['deposit_asset_'||trigger.data.deposit_asset] = $value;
+								var['deposit_asset_'||$deposit_asset] = $value;
 							else {
 								$variables[$name] = $value;
 								var['variables'] = $variables;
