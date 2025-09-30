@@ -8,6 +8,9 @@
 		$friend_aa = params.friend_aa;
 		require($friend_aa, "no friend_aa");
 
+		$constants = var[$friend_aa]['constants'];
+		$asset = $constants.asset; // FRD token
+
 		$names = [
 			'rewards_aa',
 			'messaging_attestors',
@@ -61,7 +64,7 @@
 					$name = trigger.data.name;
 					if ($name == 'deposit_asset'){
 						$deposit_asset = trigger.data.deposit_asset;
-						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44, "invalid deposit asset");
+						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44 AND $deposit_asset != $asset, "invalid deposit asset");
 						$full_name = $name||'_'||$deposit_asset;
 					}
 					else
@@ -114,7 +117,7 @@
 					require($is_allowed_name($name), "unknown name: " || $name);
 					if ($name == 'deposit_asset'){
 						$deposit_asset = trigger.data.deposit_asset;
-						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44, "invalid deposit asset");
+						require(typeof($deposit_asset) == 'string' AND length($deposit_asset) == 44 AND $deposit_asset != $asset, "invalid deposit asset");
 						$full_name = $name||'_'||$deposit_asset;
 					}
 					else
