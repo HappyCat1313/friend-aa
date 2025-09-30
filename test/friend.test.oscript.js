@@ -883,6 +883,7 @@ describe('Friends', function () {
 		this.alice_profile.total_streak = 1
 		this.alice_profile.current_streak = 1
 		this.alice_profile.first_friend = this.bobAddress
+		this.alice_profile.new_users = 1
 		this.bob_profile.balances.frd = bob_locked
 		this.bob_profile.new_user_rewards = new_user_reward
 		this.bob_profile.locked_rewards = bob_locked
@@ -891,6 +892,7 @@ describe('Friends', function () {
 		this.bob_profile.total_streak = 1
 		this.bob_profile.current_streak = 1
 		this.bob_profile.first_friend = this.aliceAddress
+		this.bob_profile.new_users = 1
 		this.bob_liquid = bob_liquid
 		this.total_locked = alice_locked + bob_locked
 		this.total_new_user_rewards = 2 * new_user_reward
@@ -1659,6 +1661,7 @@ describe('Friends', function () {
 		this.bob_profile.locked_rewards += bob_locked + referral_reward
 		this.bob_profile.liquid_rewards += bob_liquid
 		this.bob_profile.last_date = today
+		this.bob_profile.new_users++
 	//	this.bob_profile.total_streak = 1
 	//	this.bob_profile.current_streak = 1
 		this.total_locked += carol_locked + bob_locked + referral_reward
@@ -1800,6 +1803,7 @@ describe('Friends', function () {
 		this.bob_profile.last_date = today
 		this.bob_profile.total_streak = 2
 		this.bob_profile.current_streak = 2
+		this.bob_profile.new_users++
 		this.total_locked += dave_locked + bob_locked + referral_reward
 		this.total_new_user_rewards += 2 * new_user_reward
 		this.total_referral_rewards += 2 * referral_reward
@@ -1934,6 +1938,7 @@ describe('Friends', function () {
 		this.bob_profile.last_date = today
 		this.bob_profile.total_streak = 3
 		this.bob_profile.current_streak = 3
+		this.bob_profile.new_users++
 		this.total_locked += eve_locked + bob_locked + referral_reward
 		this.total_new_user_rewards += 2 * new_user_reward
 		this.total_referral_rewards += 2 * referral_reward
@@ -2068,6 +2073,7 @@ describe('Friends', function () {
 		this.bob_profile.last_date = today
 		this.bob_profile.total_streak = 4
 		this.bob_profile.current_streak = 4
+		this.bob_profile.new_users++
 		this.total_locked += fred_locked + bob_locked + referral_reward
 		this.total_new_user_rewards += 2 * new_user_reward
 		this.total_referral_rewards += 2 * referral_reward

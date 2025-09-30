@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 788154 */
+		/* nonce: 222212 */
 
 		$matching_timeout = 600;
 
@@ -161,20 +161,16 @@
 
 
 			// accept variable changes from the governance AA
-			{ 
+			{
 				if: `{ trigger.address == $governance_aa AND trigger.data.name }`, // trigger.data.value can be falsy
-				init: `{
-					$name = trigger.data.name;
-					$value = trigger.data.value;
-				}`,
 				messages: [
 					{
 						app: 'state',
 						state: `{
-							if ($name == 'deposit_asset')
-								var['deposit_asset_'||$deposit_asset] = $value;
+							if (trigger.data.name == 'deposit_asset')
+								var['deposit_asset_'||$deposit_asset] = trigger.data.value;
 							else {
-								$variables[$name] = $value;
+								$variables[trigger.data.name] = trigger.data.value;
 								var['variables'] = $variables;
 							}
 						}`
@@ -184,7 +180,7 @@
 
 
 			// add a new ghost
-			{ 
+			{
 				if: `{
 					$ghost_name = trigger.data.ghost_name;
 					trigger.address == $ghost_admin AND trigger.data.add_ghost AND $ghost_name
@@ -411,11 +407,13 @@
 										$user1.first_friend = $friend;
 										// record a new user reward for the opposite user
 										$user2.new_user_rewards = $user2.new_user_rewards + $rewards.user2.new_user_reward;
+										$user2.new_users = $user2.new_users + 1;
 									}
 									if ($rewards.user2.is_new){
 										$user2.first_friend = trigger.address;
 										// record a new user reward for the opposite user
 										$user1.new_user_rewards = $user1.new_user_rewards + $rewards.user1.new_user_reward;
+										$user1.new_users = $user1.new_users + 1;
 									}
 								}
 
