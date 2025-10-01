@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 222212 */
+		/* nonce: 454472 */
 
 		$matching_timeout = 600;
 
@@ -109,7 +109,7 @@
 			$exchange_rates = $get_deposit_asset_exchange_rates($deposit_asset);
 		}
 
-		$governance_base_aa = 'POVOHVO7QKPWXW5XK7ZCV3622XXT2WHI';
+		$governance_base_aa = 'P7VAMRL2AOEZL26TLDKWIEFFLMASRZ2Z';
 
 	}`,
 	messages: {
