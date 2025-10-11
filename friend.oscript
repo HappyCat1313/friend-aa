@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 454472 */
+		/* nonce: 1491288 */
 
 		$matching_timeout = 600;
 
@@ -18,7 +18,7 @@
 
 		$get_variables = () => {
 			var['variables'] OTHERWISE {
-				rewards_aa: 'AQ7D2DWJI6PQTEOD575IXJHL7OMWJS52',
+				rewards_aa: 'IAUQP2RVVKYEV35EQAUERZH2GAEJKYAO',
 				messaging_attestors: 'JBW7HT5CRBSF7J7RD26AYLQG6GZDPFPS:5KM36CFPBD2QJLVD65PHZG34WEM4RPY2',
 				real_name_attestors: 'JFKWGRMXP3KHUAFMF4SJZVDXFL6ACC6P',
 				referrer_frd_deposit_reward_share: 0.02,
@@ -298,7 +298,7 @@
 							if ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)
 								response['message'] = "Deposited";
 							response['unlock_date'] = $new_unlock_date;
-							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset});
+							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset, total_balance: $total_balance});
 						}`
 					}
 				]
@@ -467,6 +467,7 @@
 								$rewards.b = $isAB ? $rewards.user2 : $rewards.user1;
 								delete($rewards, 'user1');
 								delete($rewards, 'user2');
+								delete($rewards, 'total_balances');
 								$friendship[$index].rewards = $rewards;
 								delete($friendship[$index], 'first'); // save storage space to make sure we don't exceed 1024 bytes
 								delete($friendship[$index], 'ts');

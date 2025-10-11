@@ -86,6 +86,10 @@
 					locked: floor($capped_total_balance2 * $locked_reward_share),
 					liquid: floor($capped_total_balance2 * $liquid_reward_share),
 				},
+				total_balances: {
+					user1: $total_balance1,
+					user2: $total_balance2,
+				},
 			};
 
 			if (!$user1.last_date)
