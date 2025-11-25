@@ -46,6 +46,7 @@
 			}
 		};
 
+		// exchange rate in bytes
 		$get_deposit_asset_exchange_rate = ($friends_aa, $asset) => {
 			$aa = var[$friends_aa]['deposit_asset_'||$asset];
 			require($aa, "unknown deposit asset");
@@ -62,12 +63,15 @@
 		};
 
 		$get_total_balance = ($balances, $ceiling_price, $friends_aa) => {
-			$totals = {in_bytes: $balances.base * $bytes_reducer};
+			$totals = {deposit_assets_balance: 0};
 			$asset_balances = filter($balances, 5, ($a, $balance) => $a != 'base' AND $a != 'frd');
 			foreach($asset_balances, 3, ($a, $balance) => {
-				$totals.in_bytes = $totals.in_bytes + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a) * $deposit_asset_reducer;
+				$totals.deposit_assets_balance = $totals.deposit_assets_balance + $balance * $get_deposit_asset_exchange_rate($friends_aa, $a);
 			});
-			$balances.frd + $totals.in_bytes / $ceiling_price
+			{
+				sans_reducers: $balances.frd + $balances.base / $ceiling_price + $totals.deposit_assets_balance / $ceiling_price,
+				with_reducers: $balances.frd + $balances.base / $ceiling_price * $bytes_reducer + $totals.deposit_assets_balance / $ceiling_price * $deposit_asset_reducer,
+			}
 		};
 
 		$get_rewards = ($address1, $address2, $user1, $user2, $user1_ref, $user2_ref, $ceiling_price, $friends_aa, $bFollowup) => {
@@ -75,8 +79,8 @@
 			$total_balance2 = $get_total_balance($user2.balances, $ceiling_price, $friends_aa);
 			$bNewUser = !$user1.last_date OR !$user2.last_date;
 			$bNewUserOrFromNewUser = $bNewUser OR $bFollowup AND ($user1.first_friend == $address2 OR $user2.first_friend == $address1);
-			$capped_total_balance1 = $bNewUserOrFromNewUser ? $total_balance1 : min($total_balance1, $balance_cap);
-			$capped_total_balance2 = $bNewUserOrFromNewUser ? $total_balance2 : min($total_balance2, $balance_cap);
+			$capped_total_balance1 = $bNewUserOrFromNewUser ? $total_balance1.with_reducers : min($total_balance1.with_reducers, $balance_cap);
+			$capped_total_balance2 = $bNewUserOrFromNewUser ? $total_balance2.with_reducers : min($total_balance2.with_reducers, $balance_cap);
 			$rewards = {
 				user1: {
 					locked: floor($capped_total_balance1 * $locked_reward_share),
@@ -98,7 +102,7 @@
 				$rewards.user2.is_new = true;
 
 			if ($bNewUser){
-				$capped_new_user_reward = floor(min($new_user_reward, $total_balance1, $total_balance2));
+				$capped_new_user_reward = floor(min($new_user_reward, $total_balance1.with_reducers, $total_balance2.with_reducers));
 				$rewards.user1.locked = $rewards.user1.locked + $capped_new_user_reward;
 				$rewards.user1.new_user_reward = $capped_new_user_reward;
 				$rewards.user2.locked = $rewards.user2.locked + $capped_new_user_reward;
@@ -107,14 +111,14 @@
 
 			$min_unlock_date = timestamp_to_string(timestamp + $year, 'date');
 			if (!$user1.last_date AND $user1.ref AND $user1_ref.unlock_date >= $min_unlock_date){
-				$capped_referral_reward1 = min($referral_reward, floor($total_balance1));
+				$capped_referral_reward1 = min($referral_reward, floor($total_balance1.with_reducers));
 				$rewards.user1.referred_user_reward = $capped_referral_reward1;
 				$rewards.user1.locked = $rewards.user1.locked + $capped_referral_reward1;
 			//	$rewards.user1.referrer = {address: $user1.ref, reward: $capped_referral_reward1};
 				$rewards.referrers[$user1.ref] = $capped_referral_reward1;
 			}
 			if (!$user2.last_date AND $user2.ref AND $user2_ref.unlock_date >= $min_unlock_date){
-				$capped_referral_reward2 = min($referral_reward, floor($total_balance2));
+				$capped_referral_reward2 = min($referral_reward, floor($total_balance2.with_reducers));
 				$rewards.user2.referred_user_reward = $capped_referral_reward2;
 				$rewards.user2.locked = $rewards.user2.locked + $capped_referral_reward2;
 			//	$rewards.user2.referrer = {address: $user2.ref, reward: $capped_referral_reward2};
