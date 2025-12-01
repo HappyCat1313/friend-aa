@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 11121 */
+		/* nonce: 1153582 */
 
 		$matching_timeout = 600;
 
@@ -540,73 +540,53 @@
 			},
 
 
-			// replace bytes with FRD or vice versa
+			// replace locked bytes or deposit assets with FRD
 			{
-				if: `{trigger.data.replace AND ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)}`,
+				if: `{trigger.data.replace}`,
 				init: `{
-					require(($received_amount?1:0) + ($received_bytes_amount?1:0) + ($received_deposit_asset_amount?1:0) == 1, "don't send more than one token");
+					require($received_amount, "must send FRD");
+					require(!$received_bytes_amount AND !$received_deposit_asset_amount, "don't send other tokens");
 					$user = var['user_'||trigger.address];
 					require($user, "you are not a user");
-					$out_amounts = {base: 0, frd: 0, deposit_asset: 0};
 					if ($deposit_asset){
-						if ($received_deposit_asset_amount){
-							$out_amounts.frd = floor($received_deposit_asset_amount * $exchange_rates.min / $ceiling_price);
-						}
-						else if ($received_amount){
-							$out_amounts.deposit_asset = floor($received_amount * $ceiling_price / $exchange_rates.max);
-							require($user.balances[$deposit_asset] >= $out_amounts.deposit_asset, "not enough deposit asset locked");
-						}
-						else
-							bounce("bytes are not swapped for deposit assets");
+						$out_deposit_asset = floor($received_amount * $ceiling_price / $exchange_rates.max);
+						require($user.balances[$deposit_asset] >= $out_deposit_asset, "not enough deposit asset locked");
 					}
-					else if ($received_amount){
-						$out_amounts.base = floor($received_amount * $ceiling_price);
-						require($user.balances.base >= $out_amounts.base, "not enough bytes locked");
+					else{
+						$out_bytes = floor($received_amount * $ceiling_price);
+						require($user.balances.base >= $out_bytes, "not enough bytes locked");
 					}
-					else if ($received_bytes_amount){ // received bytes
-						$out_amounts.frd = floor($received_bytes_amount / $ceiling_price);
-					}
-
-					if ($out_amounts.frd)
-						require($user.balances.frd >= $out_amounts.frd, "not enough FRD locked");
 				}`,
 				messages: [
 					{
+						if: "{$out_bytes}",
 						app: 'payment',
 						payload: {
 							asset: "base",
-							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.base}"}],
+							outputs: [{address: "{trigger.address}", amount: "{$out_bytes}"}],
 						}
 					},
 					{
-						app: 'payment',
-						payload: {
-							asset: "{$asset}",
-							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.frd}"}],
-						}
-					},
-					{
-						if: "{$out_amounts.deposit_asset}",
+						if: "{$out_deposit_asset}",
 						app: 'payment',
 						payload: {
 							asset: "{$deposit_asset}",
-							outputs: [{address: "{trigger.address}", amount: "{$out_amounts.deposit_asset}"}],
+							outputs: [{address: "{trigger.address}", amount: "{$out_deposit_asset}"}],
 						}
 					},
 					{
 						app: 'state',
 						state: `{
 							response['message'] = 'Replaced';
-							response['event'] = json_stringify({type: 'replace', address: trigger.address, received_amount: $received_amount, received_bytes_amount: $received_bytes_amount, received_deposit_asset_amount: $received_deposit_asset_amount, out_amount: $out_amounts.frd, out_bytes_amount: $out_amounts.base, out_deposit_asset_amount: $out_amounts.deposit_asset, deposit_asset: $deposit_asset});
-							var['total_locked'] += $received_amount - $out_amounts.frd;
-							var['total_locked_bytes'] += $received_bytes_amount - $out_amounts.base;
-							$user.balances.frd = $user.balances.frd + $received_amount - $out_amounts.frd;
-							$user.balances.base = $user.balances.base + $received_bytes_amount - $out_amounts.base;
+							response['event'] = json_stringify({type: 'replace', address: trigger.address, received_amount: $received_amount, out_bytes_amount: $out_bytes, out_deposit_asset_amount: $out_deposit_asset, deposit_asset: $deposit_asset});
+							var['total_locked'] += $received_amount;
+							var['total_locked_bytes'] -= $out_bytes;
+							$user.balances.frd = $user.balances.frd + $received_amount;
+							$user.balances.base = $user.balances.base - $out_bytes;
 							if ($deposit_asset){
-								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount - $out_amounts.deposit_asset;
+								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] - $out_deposit_asset;
 								if ($user.balances[$deposit_asset] == 0)
 									delete($user.balances, $deposit_asset);
-								require(length($user.balances) <= 3, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
 							}
 							var['user_'||trigger.address] = $user;
 						}`

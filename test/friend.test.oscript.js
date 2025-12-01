@@ -1084,9 +1084,11 @@ describe('Friends', function () {
 		expect(response.response_unit).to.be.null
 
 		this.aliceVotes.messaging_attestors = {
-				value,
-				sqrt_balance,
-			}
+			value,
+			sqrt_balance,
+		}
+		expect(this.aliceVotes.messaging_attestors.sqrt_balance).to.be.gt(this.aliceVotes['deposit_asset_' + this.usdc].sqrt_balance) // because alice has earned some FRD since the previous vote
+	//	expect(this.aliceVotes.messaging_attestors.sqrt_balance).to.be.lt(this.aliceVotes['deposit_asset_' + this.usdc].sqrt_balance) // because the ceiling price has grown in a few days and the locked Bytes became less valuable in terms of FRD
 
 		const { vars: friend_vars } = await this.alice.readAAStateVars(this.friend_aa)
 		expect(friend_vars['variables']).to.be.undefined
@@ -2205,11 +2207,9 @@ describe('Friends', function () {
 	})
 
 
-	it('Carol replaces some FRD with Bytes', async () => {
-		const timestamp = await this.timetravel('1d')
-		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+	it('Carol tries to replace some locked FRD with Bytes', async () => {
+		await this.timetravel('1d')
 		const bytes_amount = 1e6
-		const out_amount = Math.floor(bytes_amount / ceiling_price)
 
 		const { unit, error } = await this.carol.triggerAaWithData({
 			toAddress: this.friend_aa,
@@ -2222,29 +2222,9 @@ describe('Friends', function () {
 		expect(unit).to.be.validUnit
 
 		const { response } = await this.network.getAaResponseToUnitOnNode(this.carol, unit)
-		expect(response.response.error).to.be.undefined
-		expect(response.bounced).to.be.false
+		expect(response.response.error).to.be.eq("must send FRD")
+		expect(response.bounced).to.be.true
 		expect(response.response_unit).to.be.validUnit
-
-		this.carol_profile.balances.frd -= out_amount
-		this.carol_profile.balances.base += bytes_amount
-		this.total_locked -= out_amount
-		this.total_locked_bytes += bytes_amount
-		
-		const { vars } = await this.carol.readAAStateVars(this.friend_aa)
-		expect(vars['user_' + this.carolAddress]).to.deep.eq(this.carol_profile)
-		expect(vars['total_locked']).to.eq(this.total_locked)
-		expect(vars['total_locked_bytes']).to.eq(this.total_locked_bytes)
-
-		const { unitObj } = await this.carol.getUnitInfo({ unit: response.response_unit })
-		console.log(Utils.getExternalPayments(unitObj))
-		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
-			{
-				asset: this.asset,
-				address: this.carolAddress,
-				amount: out_amount,
-			},
-		])
 	})
 
 
@@ -2358,8 +2338,7 @@ describe('Friends', function () {
 			value,
 			sqrt_balance,
 		}
-	//	console.log('carol votes', this.carolVotes)
-		expect(this.carolVotes.rewards_aa.sqrt_balance).to.be.lt(this.carolVotes.followup_reward_share.sqrt_balance) // because the ceiling price has grown in 4 days and the locked Bytes became less valuable in terms of FRD
+		expect(this.carolVotes.rewards_aa.sqrt_balance).to.be.eq(this.carolVotes.followup_reward_share.sqrt_balance) // because Carol has only FRD
 
 		const { vars } = await this.carol.readAAStateVars(this.governance_aa)
 		expect(vars['support_' + name + '_' + value]).to.be.closeTo(sqrt_balance, 0.000000001)
@@ -2667,7 +2646,7 @@ describe('Friends', function () {
 
 
 
-	it('Alice replaces some Bytes with FRD', async () => {
+	it('Alice replaces some locked Bytes with FRD', async () => {
 		const timestamp = await this.timetravel('10d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 		const amount = 1e6
@@ -2715,7 +2694,7 @@ describe('Friends', function () {
 	})
 
 
-	it('Alice replaces some USDC with FRD', async () => {
+	it('Alice replaces some locked USDC with FRD', async () => {
 		const timestamp = await this.timetravel('10d')
 		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
 		const amount = 10e6 // in FRD
@@ -2767,15 +2746,9 @@ describe('Friends', function () {
 	})
 
 
-	it('Alice replaces some FRD with USDC', async () => {
-		const timestamp = await this.timetravel('10d')
-		const ceiling_price = 2 ** ((timestamp - this.launch_ts) / 365 / 24 / 3600)
+	it('Alice tries to replace some locked FRD with USDC', async () => {
+		await this.timetravel('10d')
 		const amount = 100e4 // in USDC
-
-		const byte_exchange_rate_in_usdc = Math.max(this.recent.current.pmax, this.recent.prev.pmax)
-		const usdc_exchange_rate_in_bytes = 1 / byte_exchange_rate_in_usdc * 0.9
-
-		const out_amount = Math.floor(amount / ceiling_price * usdc_exchange_rate_in_bytes)
 
 		const { unit, error } = await this.alice.sendMulti({
 			outputs_by_asset: {
@@ -2795,28 +2768,9 @@ describe('Friends', function () {
 		expect(unit).to.be.validUnit
 
 		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
-		expect(response.response.error).to.be.undefined
-		expect(response.bounced).to.be.false
+		expect(response.response.error).to.be.eq("must send FRD")
+		expect(response.bounced).to.be.true
 		expect(response.response_unit).to.be.validUnit
-
-		this.alice_profile.balances.frd -= out_amount
-		this.alice_profile.balances[this.usdc] += amount
-		this.total_locked -= out_amount
-
-		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
-		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
-		expect(vars['total_locked']).to.eq(this.total_locked)
-		expect(vars['total_locked_bytes']).to.eq(this.total_locked_bytes)
-
-		const { unitObj } = await this.alice.getUnitInfo({ unit: response.response_unit })
-		console.log(Utils.getExternalPayments(unitObj))
-		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
-			{
-				asset: this.asset,
-				address: this.aliceAddress,
-				amount: out_amount,
-			},
-		])
 	})
 
 
@@ -2863,10 +2817,6 @@ describe('Friends', function () {
 				asset: this.asset,
 				address: this.carolAddress,
 				amount: this.carol_profile.balances.frd,
-			},
-			{
-				address: this.carolAddress,
-				amount: this.carol_profile.balances.base,
 			},
 			{
 				address: this.governance_aa,
