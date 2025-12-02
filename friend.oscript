@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 26765 */
+		/* nonce: 2171809 */
 
 		$matching_timeout = 600;
 
@@ -487,9 +487,23 @@
 					$user = var['user_'||trigger.address];
 					require($user, "you are not a user");
 					require(timestamp_to_string(timestamp, 'date') >= $user.unlock_date, "your balance unlocks on "||$user.unlock_date);
-					require($user.balances.frd > 0 OR $user.balances.base > 0 OR $deposit_asset AND $user.balances[$deposit_asset] > 0, "you have no balance");
+					require($user.balances.frd OR $user.balances.base OR length($user.balances) > 2, "you have no balance");
+					$asset_balances = filter($user.balances, 5, ($a, $balance) => $a != 'base' AND $a != 'frd');
+					$payments = [];
+					foreach($asset_balances, 3, ($a, $balance) => {
+						$payments[] = {
+							app: 'payment',
+							payload: {
+								asset: $a,
+								outputs: [{address: trigger.address, amount: $balance}],
+							}
+						};
+					});
 				}`,
 				messages: [
+					`{$payments[0] OTHERWISE ''}`,
+					`{$payments[1] OTHERWISE ''}`,
+					`{$payments[2] OTHERWISE ''}`,
 					{
 						app: 'payment',
 						payload: {
@@ -508,14 +522,6 @@
 						}
 					},
 					{
-						if: `{$deposit_asset}`,
-						app: 'payment',
-						payload: {
-							asset: "{$deposit_asset}",
-							outputs: [{address: "{trigger.address}", amount: "{$user.balances[$deposit_asset]}"}],
-						}
-					},
-					{
 						app: 'data',
 						payload: {
 							update_user_balance: 1,
@@ -526,13 +532,10 @@
 						app: 'state',
 						state: `{
 							response['message'] = 'Withdrawn';
-							response['event'] = json_stringify({type: 'withdrawal', address: trigger.address, balance: $user.balances.frd, bytes_balance: $user.balances.base, deposit_asset_balance: $deposit_asset ? $user.balances[$deposit_asset] : 0, deposit_asset: $deposit_asset});
+							response['event'] = json_stringify({type: 'withdrawal', address: trigger.address, balances: $user.balances});
 							var['total_locked'] -= $user.balances.frd;
 							var['total_locked_bytes'] -= $user.balances.base;
-							$user.balances.frd = 0;
-							$user.balances.base = 0;
-							if ($deposit_asset)
-								$user.balances[$deposit_asset] = 0;
+							$user.balances = {frd: 0, base: 0};
 							var['user_'||trigger.address] = $user;
 						}`
 					}

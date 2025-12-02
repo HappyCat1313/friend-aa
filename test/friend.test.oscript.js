@@ -2848,6 +2848,70 @@ describe('Friends', function () {
 	})
 
 
+	it('Alice withdraws all including USDC', async () => {
+		const { unit, error } = await this.alice.triggerAaWithData({
+			toAddress: this.friend_aa,
+			amount: 10000,
+			data: {
+				withdraw: 1,
+			},
+		})
+		expect(error).to.be.null
+		expect(unit).to.be.validUnit
+
+		const { response } = await this.network.getAaResponseToUnitOnNode(this.alice, unit)
+		expect(response.response.error).to.be.undefined
+		expect(response.bounced).to.be.false
+		expect(response.response_unit).to.be.validUnit
+
+		const { unitObj } = await this.alice.getUnitInfo({ unit: response.response_unit })
+		console.log(Utils.getExternalPayments(unitObj))
+		expect(Utils.getExternalPayments(unitObj)).to.deep.equalInAnyOrder([
+			{
+				asset: this.asset,
+				address: this.aliceAddress,
+				amount: this.alice_profile.balances.frd,
+			},
+			{
+				asset: this.usdc,
+				address: this.aliceAddress,
+				amount: this.alice_profile.balances[this.usdc],
+			},
+			{
+				address: this.governance_aa,
+				amount: 1000,
+			},
+			{
+				address: this.aliceAddress,
+				amount: this.alice_profile.balances.base,
+			},
+		])
+		
+		this.total_locked -= this.alice_profile.balances.frd
+		this.total_locked_bytes -= this.alice_profile.balances.base
+		this.alice_profile.balances.frd = 0
+		this.alice_profile.balances.base = 0
+		delete this.alice_profile.balances[this.usdc]
+		
+		const { vars } = await this.alice.readAAStateVars(this.friend_aa)
+		expect(vars['user_' + this.aliceAddress]).to.deep.eq(this.alice_profile)
+		expect(vars['total_locked']).to.eq(this.total_locked)
+		expect(vars['total_locked_bytes']).to.eq(this.total_locked_bytes)
+
+		this.aliceVotes['deposit_asset_' + this.usdc].sqrt_balance = 0
+		this.aliceVotes.messaging_attestors.sqrt_balance = 0
+		const { vars: governance_vars } = await this.carol.readAAStateVars(this.governance_aa)
+		const checkVar = (name, value) => {
+			expect(governance_vars['support_' + name + '_' + value]).to.eq(0)
+			expect(governance_vars['leader_' + name]).to.eq(value)
+			expect(governance_vars['choice_' + this.aliceAddress + '_' + name]).to.eq(value)
+		}
+		checkVar('deposit_asset_' + this.usdc, this.pool_aa)
+		checkVar('messaging_attestors', this.messagingAttestorAddress + ':' + this.bobAddress)
+		expect(governance_vars['votes_' + this.aliceAddress]).deep.eq(this.aliceVotes)
+	})
+
+
 	after(async () => {
 		await this.network.stop()
 	})
