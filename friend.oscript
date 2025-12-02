@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 1153582 */
+		/* nonce: 26765 */
 
 		$matching_timeout = 600;
 
@@ -223,7 +223,7 @@
 
 					require(!is_aa(trigger.address), "AAs not allowed to participate");
 
-					$user = var['user_'||trigger.address] OTHERWISE {balances: {}, unlock_date: false, reg_date: $today, current_ghost_num: 1, last_deposit_date: '', last_date: ''};
+					$user = var['user_'||trigger.address] OTHERWISE {balances: {frd: 0, base: 0}, unlock_date: false, reg_date: $today, current_ghost_num: 1, last_deposit_date: '', last_date: ''};
 					$bNewUser = !$user.unlock_date;
 
 					// total_balance is without reducers
@@ -280,7 +280,7 @@
 							$user.balances.base = $user.balances.base + $received_bytes_amount;
 							if ($deposit_asset){
 								$user.balances[$deposit_asset] = $user.balances[$deposit_asset] + $received_deposit_asset_amount;
-								require(length($user.balances) <= 3, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
+								require(length($user.balances) <= 5, "maximum 3 deposit assets allowed, remove some old ones before adding new assets");
 							}
 							$user.unlock_date = $new_unlock_date;
 							if ($user.last_deposit_date != $today){
