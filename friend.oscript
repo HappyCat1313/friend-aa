@@ -227,8 +227,8 @@
 					$bNewUser = !$user.unlock_date;
 
 					// total_balance is without reducers
-					$total_balance = $user.balances.frd + $received_amount + ($user.balances.base + $received_bytes_amount + ($deposit_asset ? ($user.balances[$deposit_asset] + $received_deposit_asset_amount) * $exchange_rates.min : 0))/$ceiling_price;
-					$bBigDeposit = $total_balance >= $variables.min_balance_instead_of_real_name;
+					$total_balance_for_threshold = $user.balances.frd + $received_amount + ($user.balances.base + $received_bytes_amount + ($deposit_asset ? ($user.balances[$deposit_asset] + $received_deposit_asset_amount) * $exchange_rates.min : 0))/$ceiling_price;
+					$bBigDeposit = $total_balance_for_threshold >= $variables.min_balance_instead_of_real_name;
 					if (!$bBigDeposit)
 						$user_id = attestation[[attestors=$variables.real_name_attestors, address=trigger.address, ifnone=false]].user_id;
 					require($user_id OR $bBigDeposit, "your address must be real-name attested or you should deposit at least "||($variables.min_balance_instead_of_real_name/1e9)||" FRD");
@@ -298,7 +298,7 @@
 							if ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)
 								response['message'] = "Deposited";
 							response['unlock_date'] = $new_unlock_date;
-							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset, total_balance: $total_balance});
+							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset, total_balance_for_threshold: $total_balance_for_threshold});
 						}`
 					}
 				]
