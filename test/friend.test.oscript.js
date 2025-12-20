@@ -1344,6 +1344,9 @@ describe('Friends', function () {
 		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
+		const ref_deposit_reward = Math.floor(amount * 0.02)
+		this.bob_liquid += ref_deposit_reward
+
 		this.total_locked += amount
 		this.carol_profile = {
 			balances: {
@@ -1358,15 +1361,15 @@ describe('Friends', function () {
 			last_deposit_date: today,
 			last_date: '',
 		}
+		this.bob_profile.referrer_deposit_rewards = ref_deposit_reward
+		this.bob_profile.referred_users = 1
 		this.ts = response.timestamp
 
 		const { vars } = await this.carol.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.carolAddress]).to.deep.eq(this.carol_profile)
+		expect(vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
-
-		const ref_deposit_reward = Math.floor(amount * 0.02)
-		this.bob_liquid += ref_deposit_reward
 
 		const { unitObj } = await this.carol.getUnitInfo({ unit: response.response_unit })
 		console.log(Utils.getExternalPayments(unitObj))
@@ -1414,6 +1417,9 @@ describe('Friends', function () {
 		const today = new Date(response.timestamp * 1000).toISOString().substring(0, 10)
 		expect(response.response.responseVars.unlock_date).to.eq(unlock_date)
 
+		const ref_deposit_reward = Math.floor(amount * 0.02)
+		this.bob_liquid += ref_deposit_reward
+
 		this.total_locked += amount
 		this.dave_profile = {
 			balances: {
@@ -1428,15 +1434,15 @@ describe('Friends', function () {
 			last_deposit_date: today,
 			last_date: '',
 		}
+		this.bob_profile.referrer_deposit_rewards += ref_deposit_reward
+		this.bob_profile.referred_users++
 		this.ts = response.timestamp
 
 		const { vars } = await this.dave.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.daveAddress]).to.deep.eq(this.dave_profile)
+		expect(vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
-
-		const ref_deposit_reward = Math.floor(amount * 0.02)
-		this.bob_liquid += ref_deposit_reward
 
 		const { unitObj } = await this.dave.getUnitInfo({ unit: response.response_unit })
 		console.log(Utils.getExternalPayments(unitObj))
@@ -1499,6 +1505,7 @@ describe('Friends', function () {
 
 		const { vars } = await this.eve.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.eveAddress]).to.deep.eq(this.eve_profile)
+		expect(vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 	})
@@ -1553,6 +1560,7 @@ describe('Friends', function () {
 
 		const { vars } = await this.fred.readAAStateVars(this.friend_aa)
 		expect(vars['user_' + this.fredAddress]).to.deep.eq(this.fred_profile)
+		expect(vars['user_' + this.bobAddress]).to.deep.eq(this.bob_profile)
 		expect(vars.total_locked).to.eq(this.total_locked)
 		expect(vars.total_locked_bytes).to.eq(this.total_locked_bytes)
 	})

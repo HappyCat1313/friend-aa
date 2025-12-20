@@ -3,7 +3,7 @@
 	doc_url: "https://friends.obyte.org/friends.json",
 	getters: `{
 
-		/* nonce: 2171809 */
+		/* nonce: 271875 */
 
 		$matching_timeout = 600;
 
@@ -253,7 +253,11 @@
 					if ($user.ref){
 						$referrer = var['user_'||$user.ref];
 						$bReferrerEligible = $referrer.unlock_date >= $min_unlock_date;
-						if (!$bReferrerEligible)
+						if ($bReferrerEligible){
+							if (!$user.no_referrer_deposit_reward)
+								$ref_reward = floor($received_amount * $variables.referrer_frd_deposit_reward_share + ($received_bytes_amount * $variables.referrer_bytes_deposit_reward_share + $received_deposit_asset_amount * $exchange_rates.min * $variables.referrer_deposit_asset_deposit_reward_share) / $ceiling_price);
+						}
+						else
 							response['warning'] = "Referrer's unlock date is less than 1 year in the future and they are not eligible to receive the deposit reward";
 					}
 
@@ -266,11 +270,11 @@
 				}`,
 				messages: [
 					{
-						if: `{$user.ref AND !$user.no_referrer_deposit_reward AND $bReferrerEligible}`,
+						if: `{$ref_reward}`,
 						app: 'payment',
 						payload: {
 							asset: `{$asset}`,
-							outputs: [{address: "{$user.ref}", amount: "{floor($received_amount * $variables.referrer_frd_deposit_reward_share + ($received_bytes_amount * $variables.referrer_bytes_deposit_reward_share + $received_deposit_asset_amount * $exchange_rates.min * $variables.referrer_deposit_asset_deposit_reward_share) / $ceiling_price)}"}]
+							outputs: [{address: "{$user.ref}", amount: "{$ref_reward}"}]
 						}
 					},
 					{
@@ -295,10 +299,17 @@
 							var['total_locked'] += $received_amount;
 							var['total_locked_bytes'] += $received_bytes_amount;
 
+							if ($ref_reward){
+								$referrer.referrer_deposit_rewards = $referrer.referrer_deposit_rewards + $ref_reward;
+								if ($bNewUser)
+									$referrer.referred_users = $referrer.referred_users + 1;
+								var['user_'||$user.ref] = $referrer;
+							}
+
 							if ($received_amount OR $received_bytes_amount OR $received_deposit_asset_amount)
 								response['message'] = "Deposited";
 							response['unlock_date'] = $new_unlock_date;
-							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset, total_balance_for_threshold: $total_balance_for_threshold});
+							response['event'] = json_stringify({type: 'deposit', owner: trigger.address, amount: $received_amount, bytes_amount: $received_bytes_amount, asset_amount: $received_deposit_asset_amount, deposit_asset: $deposit_asset, total_balance_for_threshold: $total_balance_for_threshold, ref_reward: $ref_reward});
 						}`
 					}
 				]
