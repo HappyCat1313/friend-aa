@@ -34,7 +34,7 @@
 			$period = $get_period($days_old, $fu_addition_days);
 			$days_old % $period == 0
 				OR $in_friend_price AND $received_amount >= $in_friend_price
-				OR $user.last_deposit_date == timestamp_to_string(timestamp, 'date') AND $user.last_day_deposits >= $min_deposit_today_for_infriends
+				OR $user.last_deposit_date == timestamp_to_string(timestamp, 'date') AND $user.last_day_frd_deposits >= $min_deposit_today_for_infriends
 		};
 
 		// either one of the users is new or both are allowed to make in-friends today
