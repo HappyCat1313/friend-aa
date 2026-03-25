@@ -1,0 +1,41 @@
+name: PoC - Uncapped Followup Reward
+
+on:
+  workflow_dispatch:
+
+jobs:
+  poc:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Setup Node.js 16
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential \
+            librocksdb-dev libsnappy-dev liblz4-dev libzstd-dev
+
+      - name: Install npm dependencies
+        run: npm install
+        env:
+          PYTHON: python3
+
+      - name: Run PoC
+        run: |
+          ./node_modules/.bin/mocha \
+            --opts test/mocha.opts \
+            --require test/bootload.js \
+            --timeout 300000 \
+            test/poc_uncapped_followup.test.js
