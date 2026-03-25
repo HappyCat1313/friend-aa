@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: '16'
 
+      - name: Downgrade npm to 7
+        run: npm install -g npm@7
+
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
